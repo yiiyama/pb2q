@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 import numpy as np
-from sympy.physics.quantum import OrthogonalKet
+from sympy.physics.quantum import Ket, OrthogonalKet
 from .field import FieldDefinition
 
 
@@ -63,6 +63,9 @@ class CompoundRegister(RegisterBase):
     """A register that consists of other registers."""
     def initial_state(self) -> OrthogonalKet:
         return OrthogonalKet(*((0,) * self.count))
+
+    def interpret(self, state: Ket) -> str:
+        return ''
 
 
 class Universe(CompoundRegister):
@@ -140,8 +143,8 @@ class Particle(CompoundRegister):
         spatial_dimension: int,
         momentum_precision: int
     ) -> int:
-        return (1 + SpinRegister.register_size(field.spin)
-                + MomentumRegister.register_size(spatial_dimension, momentum_precision)
+        return (1 + MomentumRegister.register_size(spatial_dimension, momentum_precision)
+                + SpinRegister.register_size(field.spin)
                 + sum(Register.min_register_size(dim) for _, dim in field.quantum_numbers))
 
     @staticmethod
@@ -161,8 +164,6 @@ class Particle(CompoundRegister):
     ):
         pos = position
         self.registers = [OccupancyRegister(pos)]
-        pos += 1
-        self.registers.append(SpinRegister(pos, field.spin))
         pos += self.registers[-1].size
         self.registers.append(MomentumRegister(
             pos,
@@ -170,6 +171,8 @@ class Particle(CompoundRegister):
             momentum_precision
         ))
         pos += self.registers[-1].size
+        pos += 1
+        self.registers.append(SpinRegister(pos, field.spin))
         self._qnum_idx = {}
         for name, dim in field.quantum_numbers:
             self._qnum_idx[name] = len(self.registers)
@@ -202,11 +205,11 @@ class Particle(CompoundRegister):
         return self.registers[0]
 
     @property
-    def spin(self) -> Register:
+    def momentum(self) -> Register:
         return self.registers[1]
 
     @property
-    def momentum(self) -> Register:
+    def spin(self) -> Register:
         return self.registers[2]
 
 
@@ -218,16 +221,6 @@ class OccupancyRegister(Register):
     @property
     def size(self) -> int:
         return 1
-
-
-class SpinRegister(Register):
-    """Spin register."""
-    @staticmethod
-    def register_size(spin: int) -> int:
-        return Register.min_register_size(spin + 1)
-
-    def __init__(self, position: int, spin: int):
-        super().__init__('spin', position, spin + 1)
 
 
 class MomentumRegister(CompoundRegister):
@@ -257,3 +250,13 @@ class MomentumRegister(CompoundRegister):
     @property
     def count(self) -> int:
         return len(self._regs)
+
+
+class SpinRegister(Register):
+    """Spin register."""
+    @staticmethod
+    def register_size(spin: int) -> int:
+        return Register.min_register_size(spin + 1)
+
+    def __init__(self, position: int, spin: int):
+        super().__init__('spin', position, spin + 1)
