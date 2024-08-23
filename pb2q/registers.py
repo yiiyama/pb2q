@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 import numpy as np
-from sympy.physics.quantum import Ket, OrthogonalKet
+from sympy.physics.quantum import Dagger, Ket, Operator, OrthogonalBra, OrthogonalKet
 from .field import FieldDefinition
 
 
@@ -28,7 +28,7 @@ class RegisterBase(ABC):
         """Return the total number of physical registers."""
 
     @abstractmethod
-    def initial_state(self) -> OrthogonalKet:
+    def initial_state(self) -> Ket:
         """Return the zero state."""
 
 
@@ -55,13 +55,13 @@ class Register(RegisterBase):
     def size(self) -> int:
         return Register.min_register_size(self.dimension)
 
-    def initial_state(self) -> OrthogonalKet:
+    def initial_state(self) -> Ket:
         return OrthogonalKet(0)
 
 
 class CompoundRegister(RegisterBase):
     """A register that consists of other registers."""
-    def initial_state(self) -> OrthogonalKet:
+    def initial_state(self) -> Ket:
         return OrthogonalKet(*((0,) * self.count))
 
     def interpret(self, state: Ket) -> str:
@@ -134,6 +134,40 @@ class Field(CompoundRegister):
     def particle_count(self) -> int:
         return 2 + self._spatial_dimension + len(self._definition.quantum_numbers)
 
+    def annihilation_op(
+        self,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        ann_op = 0
+        for ipart, particle in enumerate(self.particles):
+            op_target = ()
+            op_source = ()
+            zeroed_particles = self._definition.max_particles - ipart - 1
+            if zeroed_particles != 0:
+                proj = null_projector(zeroed_particles)
+                op_target += proj.ket.args
+                op_source += proj.bra.args
+            p_op = particle.annihilation_op(momentum, spin, **quantum_numbers)
+            op_target += p_op.ket.args
+            op_source += p_op.bra.args
+            if ipart != 0:
+                target, source = id_projector(ipart + 1)
+                op_target += target
+                op_source += source
+            ann_op += (OrthogonalKet(*op_target) * OrthogonalBra(*op_source)) * symmetrizer(ipart)
+
+        return ann_op
+
+    def creation_op(
+        self,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ):
+        return Dagger(self.annihilation_op(momentum, spin, **quantum_numbers))
+
 
 class Particle(CompoundRegister):
     """Register for a single particle."""
@@ -163,7 +197,7 @@ class Particle(CompoundRegister):
         index: Optional[int] = None
     ):
         pos = position
-        self.registers = [OccupancyRegister(pos)]
+        
         pos += self.registers[-1].size
         self.registers.append(MomentumRegister(
             pos,
@@ -173,9 +207,7 @@ class Particle(CompoundRegister):
         pos += self.registers[-1].size
         pos += 1
         self.registers.append(SpinRegister(pos, field.spin))
-        self._qnum_idx = {}
         for name, dim in field.quantum_numbers:
-            self._qnum_idx[name] = len(self.registers)
             self.registers.append(Register(name, pos, dim))
             pos += self.registers[-1].size
 
@@ -187,10 +219,9 @@ class Particle(CompoundRegister):
 
     def __getattr__(self, name: str) -> Any:
         try:
-            idx = self._qnum_idx[name]
-        except KeyError as exc:
+            return next(reg for reg in self.registers[3:] if reg.name == name)
+        except StopIteration as exc:
             raise AttributeError from exc
-        return self.registers[idx]
 
     @property
     def size(self) -> int:
@@ -211,6 +242,26 @@ class Particle(CompoundRegister):
     @property
     def spin(self) -> Register:
         return self.registers[2]
+
+    def annihilation_op(
+        self,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        source_labels = (1,) + momentum
+        if spin is not None:
+            source_labels += (spin,)
+        source_labels += tuple(quantum_numbers[reg.name] for reg in self.registers[3:])
+        return self.initial_state() * OrthogonalBra(*source_labels)
+
+    def creation_op(
+        self,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ):
+        return Dagger(self.annihilation_op(momentum, spin, **quantum_numbers))
 
 
 class OccupancyRegister(Register):
