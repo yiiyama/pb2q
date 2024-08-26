@@ -8,6 +8,13 @@ from sympy.physics.quantum import (Bra, BraBase, Ket, KetBase, IdentityOperator,
 from sympy.printing.pretty.stringpict import prettyForm
 
 
+def fn(self, bra, **options):  # pylint: disable=unused-argument
+    return InnerProduct(bra, self.ket) * self.bra
+
+
+OuterProduct._apply_from_right_to = fn
+
+
 class ProductState(StateBase):  # pylint: disable=abstract-method
     """General abstract quantum product state."""
     _op_priority = 20
