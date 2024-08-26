@@ -235,7 +235,7 @@ class SwapOperator(PermutationOperator):  # pylint: disable=abstract-method
     def __new__(cls, *args, **kwargs):
         if not (len(args) == 2 and all(isinstance(arg, int) for arg in args)):
             raise ValueError('SwapOperator requires two integer arguments')
-        super().__new__(cls, *tuple(sorted(args)[::-1]), **kwargs)
+        return super().__new__(cls, *tuple(sorted(args)[::-1]), **kwargs)
 
     def _print_operator_name(self, printer, *args):
         return 'SWAP'

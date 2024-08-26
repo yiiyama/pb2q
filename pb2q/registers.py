@@ -5,6 +5,7 @@ from typing import Optional, Union
 from sympy import S
 from sympy.physics.quantum import Dagger, IdentityOperator, Ket, Operator, TensorProduct
 from .field import FieldDefinition
+from .operators import step_symmetrizer
 from .sympy import OrthogonalProductBra, OrthogonalProductKet
 
 
@@ -57,7 +58,7 @@ class Universe(CompoundRegister):
 
     @classmethod
     def size(cls) -> int:
-        return sum(field.size for field in cls._singleton.fields.values())
+        return sum(field.size() for field in cls._singleton.fields.values())
 
     def __init__(
         self,
@@ -74,23 +75,16 @@ class Universe(CompoundRegister):
         spin = Spin.of_spin(definition.spin)
         quantum_numbers = [type(name, (Register,), {'dimension': dimension})
                            for name, dimension in definition.quantum_numbers]
-        field_cls = type(
-            definition.name,
-            (Field,),
-            {
-                'momentum': momentum,
-                'spin': spin,
-                'quantum_numbers': quantum_numbers,
-                'max_particles': definition.max_particles
-            }
-        )
-        particle_cls = type(
-            definition.name + 'Particle',
-            (Particle,),
-            {
-                'field': field_cls
-            }
-        )
+        attributes = {'momentum': momentum}
+        if spin is not None:
+            attributes['spin'] = spin
+        attributes.update({
+            'quantum_numbers': quantum_numbers,
+            'max_particles': definition.max_particles
+        })
+        field_cls = type(definition.name, (Field,), attributes)
+
+        particle_cls = type(definition.name + 'Particle', (Particle,), {'field': field_cls})
         field_cls.particle = particle_cls
 
         return field_cls()
@@ -126,7 +120,7 @@ class Field(CompoundRegister):
             annihilator_args = list(cls.projection_op(0, zeroed_particles).args)
             annihilator_args.append(cls.particle.annihilation_op(momentum, spin, **quantum_numbers))
             annihilator_args.extend(cls.projection_op(1, ipart).args)
-            ann_op += TensorProduct(*annihilator_args) * step_symmetrizer(ipart)
+            ann_op += TensorProduct(*annihilator_args) * step_symmetrizer(ipart + 1)
 
         return ann_op
 
@@ -158,7 +152,8 @@ class Particle(CompoundRegister):
 
     @classmethod
     def size(cls) -> int:
-        return 2 + cls.field.momentum.spatial_dimension + len(cls.field.quantum_numbers)
+        return (1 + int(cls.field.spin is not None) + cls.field.momentum.spatial_dimension
+                + len(cls.field.quantum_numbers))
 
     def __init__(
         self,
@@ -172,9 +167,11 @@ class Particle(CompoundRegister):
 
         self.registers = [
             Occupancy(),
-            self.field.momentum(),
-            self.field.spin()
-        ] + [reg_cls() for reg_cls in self.field.quantum_numbers]
+            self.field.momentum()
+        ]
+        if self.field.spin is not None:
+            self.registers.append(self.field.spin())
+        self.registers.extend(reg_cls() for reg_cls in self.field.quantum_numbers)
 
     @property
     def occupancy(self) -> Register:
@@ -186,6 +183,8 @@ class Particle(CompoundRegister):
 
     @property
     def spin(self) -> Register:
+        if self.field.spin is None:
+            return None
         return self.registers[2]
 
     def quantum_number(self, name) -> Register:
@@ -271,12 +270,14 @@ class Spin(Register):
 
     @classmethod
     def of_spin(cls, spin: int) -> type['Spin']:
-        return cls._subclasses[spin]
+        if spin == 0:
+            return None
+        return cls._subclasses[spin - 1]
 
     def __init__(self):
         super().__init__()
         self._name = 'Spin'
 
 
-Spin._subclasses.extend(type(f'Spin{i}Halves', (Spin,), {'spin': i})
-                        for i in range(2))
+Spin._subclasses.extend(type(f'Spin{i}Hal' + ('f' if i == 1 else 'ves'), (Spin,), {'spin': i})
+                        for i in range(1, 4))
