@@ -27,10 +27,11 @@ class ProductKet(ProductState, KetBase):  # pylint: disable=abstract-method
                 and sum(len(arg.args) for arg in other.args) == len(self.args)):
             other_prod = self.dual_class()(*sum((arg.args for arg in other.args), ()))
             return OuterProduct(self, other_prod)
-        elif isinstance(other, ProductBra) and len(other.args) == len(self.args):
+
+        if isinstance(other, ProductBra) and len(other.args) == len(self.args):
             return OuterProduct(self, other)
-        else:
-            return Expr.__mul__(self, other)
+
+        return Expr.__mul__(self, other)
 
     def __rmul__(self, other):
         if isinstance(other, TensorProduct):
@@ -38,8 +39,9 @@ class ProductKet(ProductState, KetBase):  # pylint: disable=abstract-method
                     and sum(len(arg.args) for arg in other.args) == len(self.args)):
                 other_prod = self.dual_class()(*sum((arg.args for arg in other.args), ()))
                 return InnerProduct(other_prod, self)
-            elif (all(isinstance(arg, Operator) for arg in other.args)
-                  and (nop := len(other.args)) <= len(self.args)):
+
+            if (all(isinstance(arg, Operator) for arg in other.args)
+                    and (nop := len(other.args)) <= len(self.args)):
                 args = [op * self.atomic_class()(ket_arg)
                         for op, ket_arg in zip(other.args[:-1], self.args[:nop - 1])]
                 # Last op is assumed to apply to all remaining args
@@ -49,13 +51,11 @@ class ProductKet(ProductState, KetBase):  # pylint: disable=abstract-method
         elif isinstance(other, ProductBra) and len(other.args) == len(self.args):
             return InnerProduct(other, self)
 
-        else:
-            return Expr.__rmul__(self, other)
+        return Expr.__rmul__(self, other)
 
 
 class ProductBra(ProductState, BraBase):  # pylint: disable=abstract-method
     """Product Bra in quantum mechanics."""
-
     @classmethod
     def dual_class(cls):
         return ProductKet
@@ -70,8 +70,9 @@ class ProductBra(ProductState, BraBase):  # pylint: disable=abstract-method
                     and sum(len(arg.args) for arg in other.args) == len(self.args)):
                 other_prod = self.dual_class()(*sum((arg.args for arg in other.args), ()))
                 return InnerProduct(self, other_prod)
-            elif (all(isinstance(arg, Operator) for arg in other.args)
-                  and (nop := len(other.args)) <= len(self.args)):
+
+            if (all(isinstance(arg, Operator) for arg in other.args)
+                    and (nop := len(other.args)) <= len(self.args)):
                 args = [self.atomic_class()(bra_arg) * op
                         for op, bra_arg in zip(other.args[:-1], self.args[:nop - 1])]
                 # Last op is assumed to apply to all remaining args
@@ -81,8 +82,7 @@ class ProductBra(ProductState, BraBase):  # pylint: disable=abstract-method
         elif isinstance(other, ProductKet) and len(other.args) == len(self.args):
             return InnerProduct(self, other)
 
-        else:
-            return Expr.__mul__(self, other)
+        return Expr.__mul__(self, other)
 
     def __rmul__(self, other):
         if (isinstance(other, TensorProduct)
@@ -90,10 +90,9 @@ class ProductBra(ProductState, BraBase):  # pylint: disable=abstract-method
                 and sum(len(arg.args) for arg in other.args) == len(self.args)):
             other_prod = self.dual_class()(*sum((arg.args for arg in other.args), ()))
             return OuterProduct(other_prod, self)
-        elif isinstance(other, ProductKet) and len(other.args) == len(self.args):
+        if isinstance(other, ProductKet) and len(other.args) == len(self.args):
             return OuterProduct(other, self)
-        else:
-            return Expr.__rmul__(self, other)
+        return Expr.__rmul__(self, other)
 
 
 class OrthogonalProductKet(OrthogonalKet, ProductKet):  # pylint: disable=abstract-method
@@ -121,10 +120,10 @@ class OrthogonalProductBra(OrthogonalBra, ProductBra):  # pylint: disable=abstra
 def to_product_state(product: TensorProduct):
     if all(isinstance(arg, OrthogonalKet) for arg in product.args):
         return OrthogonalProductKet(*sum((arg.args for arg in product.args), ()))
-    elif all(isinstance(arg, KetBase) for arg in product.args):
+    if all(isinstance(arg, KetBase) for arg in product.args):
         return ProductKet(*sum((arg.args for arg in product.args), ()))
-    elif all(isinstance(arg, OrthogonalBra) for arg in product.args):
+    if all(isinstance(arg, OrthogonalBra) for arg in product.args):
         return OrthogonalProductBra(*sum((arg.args for arg in product.args), ()))
-    elif all(isinstance(arg, BraBase) for arg in product.args):
+    if all(isinstance(arg, BraBase) for arg in product.args):
         return ProductBra(*sum((arg.args for arg in product.args), ()))
     return product
