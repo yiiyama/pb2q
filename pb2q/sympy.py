@@ -120,7 +120,7 @@ class OrthogonalProductBra(OrthogonalBra, ProductBra):  # pylint: disable=abstra
         return OrthogonalBra
 
 
-def to_product_state(product: TensorProduct):
+def to_product_state(product: TensorProduct) -> ProductState:
     if all(isinstance(arg, OrthogonalKet) for arg in product.args):
         return OrthogonalProductKet(*sum((arg.args for arg in product.args), ()))
     if all(isinstance(arg, KetBase) for arg in product.args):
@@ -129,7 +129,19 @@ def to_product_state(product: TensorProduct):
         return OrthogonalProductBra(*sum((arg.args for arg in product.args), ()))
     if all(isinstance(arg, BraBase) for arg in product.args):
         return ProductBra(*sum((arg.args for arg in product.args), ()))
-    return product
+    raise ValueError('Cannot convert argument to product state')
+
+
+def to_tensor_product(state: StateBase) -> TensorProduct:
+    if isinstance(state, OrthogonalKet):
+        return TensorProduct(*[OrthogonalKet(arg) for arg in state.args])
+    if isinstance(state, KetBase):
+        return TensorProduct(*[Ket(arg) for arg in state.args])
+    if isinstance(state, OrthogonalBra):
+        return TensorProduct(*[OrthogonalBra(arg) for arg in state.args])
+    if isinstance(state, BraBase):
+        return TensorProduct(*[Bra(arg) for arg in state.args])
+    raise ValueError('Cannot convert argument to TensorProduct')
 
 
 class PermutationOperator(Operator):  # pylint: disable=abstract-method
@@ -152,17 +164,14 @@ class PermutationOperator(Operator):  # pylint: disable=abstract-method
     def default_args(cls):
         return ('PERM',)
 
-    def __new__(cls, indices: tuple[int, ...]):
-        if len(indices) <= 1:
+    def __new__(cls, *args, **kwargs):
+        if len(args) <= 1 or args == tuple(sorted(args)):
             return IdentityOperator()
-        if len(indices) == 2:
-            if indices[0] == indices[1]:
-                return IdentityOperator()
-            return SwapOperator(*indices)
-        return super().__new__(cls, indices)
-
-    def __init__(self, indices: tuple[int, ...]):
-        super().__init__(*indices)
+        if len(set(args)) != len(args):
+            raise ValueError('Permutation indices must be unique')
+        if len(args) == 2:
+            return super().__new__(SwapOperator, *args, **kwargs)
+        return super().__new__(cls, *args, **kwargs)
 
     def to_swaps(self) -> Mul:
         slots = np.sort(self.args)
@@ -194,15 +203,21 @@ class PermutationOperator(Operator):  # pylint: disable=abstract-method
     def _print_operator_name_pretty(self, printer, *args):
         return prettyForm('PERM')
 
-    def _apply_operator(self, ket: Union[Ket, TensorProduct], **options) -> ProductKet:
-        if isinstance(ket, TensorProduct):
-            ket = to_product_state(ket)
-        if not (isinstance(ket, Ket) and len(ket.args) > max(self.args)):
-            raise ValueError('Ket is inconsistent with the permutation')
-        new_args = list(ket.args)
+    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\mathrm{PERM}'
+
+    def _apply_operator(self, ket: Union[KetBase, TensorProduct], **options) -> ProductKet:
+        if isinstance(ket, KetBase):
+            ket = to_tensor_product(ket)
+        if not (isinstance(ket, TensorProduct)
+                and all(isinstance(arg, KetBase) and len(arg.args) == 1 for arg in ket.args)):
+            raise ValueError('Argument is not a product state')
+        if len(ket.args) <= max(self.args):
+            raise ValueError('State is inconsistent with the permutation')
+        new_kets = list(ket.args)
         for source, dest in zip(self.args, np.sort(self.args)):
-            new_args[dest] = ket.args[source]
-        return to_product_state(TensorProduct(*new_args))
+            new_kets[dest] = ket.args[source]
+        return to_product_state(TensorProduct(*new_kets))
 
     def _eval_inverse(self):
         swaps = self.to_swaps()
@@ -217,17 +232,19 @@ class SwapOperator(PermutationOperator):  # pylint: disable=abstract-method
     def default_args(cls):
         return ('SWAP',)
 
-    def __new__(cls, ireg1: int, ireg2: int):
-        super().__new__(cls, (max(ireg1), min(ireg2)))
-
-    def __init__(self, ireg1: int, ireg2: int):
-        super().__init__((max(ireg1), min(ireg2)))
+    def __new__(cls, *args, **kwargs):
+        if not (len(args) == 2 and all(isinstance(arg, int) for arg in args)):
+            raise ValueError('SwapOperator requires two integer arguments')
+        super().__new__(cls, *tuple(sorted(args)[::-1]), **kwargs)
 
     def _print_operator_name(self, printer, *args):
         return 'SWAP'
 
     def _print_operator_name_pretty(self, printer, *args):
         return prettyForm('SWAP')
+
+    def _print_operator_name_latex(self, printer, *args):
+        return r'\mathrm{SWAP}'
 
     def _eval_inverse(self):
         return self
