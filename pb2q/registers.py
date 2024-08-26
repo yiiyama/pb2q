@@ -3,9 +3,9 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 from sympy import S
-from sympy.physics.quantum import (Dagger, IdentityOperator, Ket, Operator, OrthogonalBra,
-                                   OrthogonalKet, TensorProduct)
+from sympy.physics.quantum import Dagger, IdentityOperator, Ket, Operator, TensorProduct
 from .field import FieldDefinition
+from .sympy import OrthogonalProductBra, OrthogonalProductKet
 
 
 class RegisterBase(ABC):
@@ -38,14 +38,14 @@ class Register(RegisterBase):
 
     @classmethod
     def initial_state(cls) -> Ket:
-        return OrthogonalKet(0)
+        return OrthogonalProductKet(0)
 
 
 class CompoundRegister(RegisterBase):
     """A register that consists of other registers."""
     @classmethod
     def initial_state(cls) -> Ket:
-        return OrthogonalKet(*((0,) * cls.size()))
+        return OrthogonalProductKet(*((0,) * cls.size()))
 
     def interpret(self, state: Ket) -> str:
         return ''
@@ -143,7 +143,7 @@ class Field(CompoundRegister):
     def projection_op(cls, state: int, num_particles: int) -> TensorProduct:
         if num_particles == 0:
             return S.One
-        proj = OrthogonalKet(state) * OrthogonalBra(state)
+        proj = OrthogonalProductKet(state) * OrthogonalProductBra(state)
         identities = [IdentityOperator() for _ in range(cls.particle.size() - 1)]
         args = []
         for _ in range(num_particles):
@@ -205,7 +205,7 @@ class Particle(CompoundRegister):
             source_labels += (spin,)
         source_labels += tuple(quantum_numbers[reg_cls.__name__]
                                for reg_cls in cls.field.quantum_numbers)
-        return cls.initial_state() * OrthogonalBra(*source_labels)
+        return cls.initial_state() * OrthogonalProductBra(*source_labels)
 
     @classmethod
     def creation_op(
@@ -230,7 +230,7 @@ class MomentumComponent(RegisterBase):
 
     @classmethod
     def initial_state(cls) -> Ket:
-        return OrthogonalKet(0)
+        return OrthogonalProductKet(0)
 
     def __init__(self, dname: str):
         super().__init__()
