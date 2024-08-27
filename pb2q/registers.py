@@ -6,8 +6,8 @@ from sympy import Add, Expr, S, sqrt
 from sympy.physics.quantum import Dagger, IdentityOperator, Ket, KetBase, Operator, TensorProduct
 from sympy.printing.pretty.stringpict import prettyForm
 from .field import FieldDefinition
-from .sympy import (OrthogonalProductBra, OrthogonalProductKet, PermutationOperator, ProductKet,
-                    to_product_state, to_tensor_product)
+from .sympy import (IdentityProduct, OrthogonalProductBra, OrthogonalProductKet,
+                    PermutationOperator, ProductKet, to_product_state, to_tensor_product)
 
 
 class RegisterBase(ABC):
@@ -140,11 +140,11 @@ class Field(CompoundRegister):
         if num_particles == 0:
             return S.One
         proj = OrthogonalProductKet(state) * OrthogonalProductBra(state)
-        identities = [IdentityOperator() for _ in range(cls.particle.size() - 1)]
+        identity = IdentityProduct(cls.particle.size() - 1)
         args = []
         for _ in range(num_particles):
             args.append(proj)
-            args.extend(identities)
+            args.append(identity)
         return TensorProduct(*args)
 
 
@@ -329,10 +329,10 @@ class ParticleSwap(Operator):  # pylint: disable=abstract-method
             ket = to_tensor_product(ket)
         if not (isinstance(ket, TensorProduct)
                 and all(isinstance(arg, KetBase) and len(arg.args) == 1 for arg in ket.args)):
-            raise ValueError('Argument is not a product state')
+            raise ValueError(f'Argument {ket} is not a product state')
 
         if len(ket.args) <= max(index1, index2) * size:
-            raise ValueError('State is inconsistent with the permutation')
+            raise ValueError(f'State {ket} is inconsistent with the permutation')
         new_kets = list(ket.args)
         for source, dest in zip((index1, index2), (index2, index1)):
             for ireg in range(size):

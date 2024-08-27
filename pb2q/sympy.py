@@ -1,10 +1,10 @@
 """Sympy state classes."""
 from typing import Union
 import numpy as np
-from sympy import Expr, Mul
+from sympy import Add, Expr, Mul
 from sympy.physics.quantum import (Bra, BraBase, Ket, KetBase, IdentityOperator, InnerProduct,
                                    Operator, OrthogonalBra, OrthogonalKet, OuterProduct, StateBase,
-                                   TensorProduct)
+                                   TensorProduct, qapply)
 from sympy.printing.pretty.stringpict import prettyForm
 
 
@@ -127,6 +127,17 @@ class OrthogonalProductBra(OrthogonalBra, ProductBra):  # pylint: disable=abstra
         return OrthogonalBra
 
 
+class ProductOperatorMixin:
+    """Operator acting on a tensor product space."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args[1:], **kwargs)
+        self.num_subsystems = args[0]
+
+
+class IdentityProduct(ProductOperatorMixin, IdentityOperator):  # pylint: disable=abstract-method
+    """Identity operator acting on a tensor product space."""
+
+
 def to_product_state(product: TensorProduct) -> ProductState:
     if all(isinstance(arg, OrthogonalKet) for arg in product.args):
         return OrthogonalProductKet(*sum((arg.args for arg in product.args), ()))
@@ -139,16 +150,31 @@ def to_product_state(product: TensorProduct) -> ProductState:
     raise ValueError('Cannot convert argument to product state')
 
 
-def to_tensor_product(state: StateBase) -> TensorProduct:
-    if isinstance(state, OrthogonalKet):
-        return TensorProduct(*[OrthogonalKet(arg) for arg in state.args])
-    if isinstance(state, KetBase):
-        return TensorProduct(*[Ket(arg) for arg in state.args])
-    if isinstance(state, OrthogonalBra):
-        return TensorProduct(*[OrthogonalBra(arg) for arg in state.args])
-    if isinstance(state, BraBase):
-        return TensorProduct(*[Bra(arg) for arg in state.args])
-    raise ValueError('Cannot convert argument to TensorProduct')
+def to_tensor_product(expr: Expr) -> Expr:
+    if isinstance(expr, (Add, Mul)):
+        return expr.func(*[to_tensor_product(arg) for arg in expr.args])
+    if isinstance(expr, (BraBase, KetBase)):
+        return TensorProduct(*[expr.func(arg) for arg in expr.args])
+    if isinstance(expr, OuterProduct):
+        ket_cls = type(expr.ket)
+        bra_cls = type(expr.bra)
+        return TensorProduct(*[OuterProduct(ket_cls(ket_arg), bra_cls(bra_arg)) for ket_arg, bra_arg
+                               in zip(expr.ket.args, expr.bra.args)])
+    if isinstance(expr, ProductOperatorMixin):
+        return TensorProduct(*[expr.func(*expr.args) for _ in range(expr.num_subsystems)])
+    if isinstance(expr, TensorProduct):
+        args = sum((to_tensor_product(subsystem).args for subsystem in expr.args), ())
+        return TensorProduct(*args)
+    if isinstance(expr, Operator):
+        return expr
+    raise ValueError(f'Cannot convert {expr} to TensorProduct')
+
+
+def register_apply(expr: Mul) -> Expr:
+    if not isinstance(expr, Mul):
+        raise ValueError(f'Cannot execute register_apply on {expr}')
+
+    return qapply(Mul(*[to_tensor_product(arg) for arg in expr.args]))
 
 
 class PermutationOperator(Operator):  # pylint: disable=abstract-method
