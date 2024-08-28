@@ -1,4 +1,4 @@
-"""Representation of registers."""
+"""Registers."""
 
 from abc import ABC, abstractmethod
 from typing import Optional, Union
@@ -9,6 +9,7 @@ from sympy.printing.pretty.stringpict import prettyForm
 from .field import FieldDefinition
 from .sympy import (IdentityProduct, OrthogonalProductBra, OrthogonalProductKet,
                     PermutationOperator, ProductKet, to_product_state, to_tensor_product)
+from .representations import UniverseState, FieldState, ParticleState
 
 
 class RegisterBase(ABC):
@@ -64,7 +65,7 @@ class Universe(CompoundRegister):
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return TensorProduct(*[field.initial_state() for field in cls._singleton.fields.values()])
+        return UniverseState(*[field.initial_state() for field in cls._singleton.fields.values()])
 
     def __init__(
         self,
@@ -110,7 +111,7 @@ class Field(CompoundRegister):
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return TensorProduct(*[cls.particle.initial_state() for _ in range(cls.max_particles)])
+        return FieldState(*[cls.particle.initial_state() for _ in range(cls.max_particles)])
 
     def __init__(self):
         super().__init__()
@@ -168,7 +169,7 @@ class Particle(CompoundRegister):
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return TensorProduct(OrthogonalKet(0), OrthogonalProductKet(*((0,) * (cls.size() - 1))))
+        return ParticleState(0, (0,) * (cls.size() - 1))
 
     def __init__(
         self,
@@ -311,6 +312,9 @@ class Control(OuterProduct):
             raise ValueError(f'Invalid constructor argument {args} for control')
 
         return super().__new__(cls, OrthogonalKet(args[0]), OrthogonalBra(args[1]))
+
+    def _eval_adjoint(self):
+        return Control(self.args[1].args[0], self.args[0].args[0])
 
     def _print_operator_name(self, printer, *args):
         return 'Ctrl'
