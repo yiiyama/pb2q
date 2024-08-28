@@ -3,7 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 from sympy import Add, Expr, S, sqrt
-from sympy.physics.quantum import Dagger, IdentityOperator, Ket, KetBase, Operator, TensorProduct
+from sympy.physics.quantum import (Dagger, IdentityOperator, Ket, KetBase, Operator, OrthogonalBra,
+                                   OrthogonalKet, OuterProduct, TensorProduct)
 from sympy.printing.pretty.stringpict import prettyForm
 from .field import FieldDefinition
 from .sympy import (IdentityProduct, OrthogonalProductBra, OrthogonalProductKet,
@@ -19,7 +20,7 @@ class RegisterBase(ABC):
 
     @classmethod
     @abstractmethod
-    def initial_state(cls) -> Ket:
+    def initial_state(cls) -> Expr:
         """Return the zero state."""
 
     def __init__(self):
@@ -39,17 +40,17 @@ class Register(RegisterBase):
         return 1
 
     @classmethod
-    def initial_state(cls) -> Ket:
+    def initial_state(cls) -> Expr:
         return OrthogonalProductKet(0)
 
 
 class CompoundRegister(RegisterBase):
     """A register that consists of other registers."""
     @classmethod
-    def initial_state(cls) -> Ket:
+    def initial_state(cls) -> Expr:
         return OrthogonalProductKet(*((0,) * cls.size()))
 
-    def interpret(self, state: Ket) -> str:  # pylint: disable=unused-argument
+    def interpret(self, state: Expr) -> str:  # pylint: disable=unused-argument
         return ''
 
 
@@ -60,6 +61,10 @@ class Universe(CompoundRegister):
     @classmethod
     def size(cls) -> int:
         return sum(field.size() for field in cls._singleton.fields.values())
+
+    @classmethod
+    def initial_state(cls) -> Expr:
+        return TensorProduct(*[field.initial_state() for field in cls._singleton.fields.values()])
 
     def __init__(
         self,
@@ -102,6 +107,10 @@ class Field(CompoundRegister):
     @classmethod
     def size(cls) -> int:
         return cls.particle.size() * cls.max_particles
+
+    @classmethod
+    def initial_state(cls) -> Expr:
+        return TensorProduct(*[cls.particle.initial_state() for _ in range(cls.max_particles)])
 
     def __init__(self):
         super().__init__()
@@ -157,6 +166,10 @@ class Particle(CompoundRegister):
         return (1 + int(cls.field.spin is not None) + cls.field.momentum.spatial_dimension
                 + len(cls.field.quantum_numbers))
 
+    @classmethod
+    def initial_state(cls) -> Expr:
+        return TensorProduct(OrthogonalKet(0), OrthogonalProductKet(*((0,) * (cls.size() - 1))))
+
     def __init__(
         self,
         index: Optional[int] = None
@@ -198,15 +211,21 @@ class Particle(CompoundRegister):
         momentum: Union[int, tuple[int, ...]],
         spin: Optional[int] = None,
         **quantum_numbers
-    ) -> Operator:
+    ) -> Expr:
         if not isinstance(momentum, tuple):
             momentum = (momentum,)
-        source_labels = (1,) + momentum
+        # control = OuterProduct(OrthogonalKet(0), OrthogonalBra(1))
+        control = Control(0, 1)
+        source_labels = momentum
         if spin is not None:
             source_labels += (spin,)
         source_labels += tuple(quantum_numbers[reg_cls.__name__]
                                for reg_cls in cls.field.quantum_numbers)
-        return cls.initial_state() * OrthogonalProductBra(*source_labels)
+        scrap = OuterProduct(
+            OrthogonalProductKet(*((0,) * len(source_labels))),
+            OrthogonalProductBra(*source_labels)
+        )
+        return TensorProduct(control, scrap)
 
     @classmethod
     def creation_op(
@@ -285,7 +304,41 @@ Spin._subclasses.extend(type(f'Spin{i}Hal' + ('f' if i == 1 else 'ves'), (Spin,)
                         for i in range(1, 4))
 
 
-class ParticleSwap(Operator):  # pylint: disable=abstract-method
+class Control(OuterProduct):
+    """Control operator for particle registers."""
+    def __new__(cls, *args):
+        if not (len(args) == 2 and all(arg in (0, 1) for arg in args)):
+            raise ValueError(f'Invalid constructor argument {args} for control')
+
+        return super().__new__(cls, OrthogonalKet(args[0]), OrthogonalBra(args[1]))
+
+    def _print_operator_name(self, printer, *args):
+        return 'Ctrl'
+
+    def _print_operator_name_pretty(self, printer, *args):
+        return prettyForm('Ctrl')
+
+    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\mathfrak{C}'
+
+    def _sympystr(self, printer, *args):
+        return Operator._sympystr(self, printer, *args)
+
+    def _sympyrepr(self, printer, *args):
+        return Operator._sympyrepr(self, printer, *args)
+
+    def _pretty(self, printer, *args):
+        return Operator._pretty(self, printer, *args)
+
+    def _latex(self, printer, *args):
+        return r'%s_{%s%s}' % (
+            self._print_operator_name_latex(printer, *args),
+            self.args[0].args[0],
+            self.args[1].args[0]
+        )
+
+
+class ParticleSwap(Operator):
     """Particle-level swap operator implemented as a sympy Operator."""
     is_hermitian = True
     is_unitary = True
@@ -357,7 +410,7 @@ class ParticleSwap(Operator):  # pylint: disable=abstract-method
         return None
 
 
-class StepSymmetrizer(Operator):  # pylint: disable=abstract-method
+class StepSymmetrizer(Operator):
     """Step-symmetrizer of a bosonic field register."""
     is_hermitian = True
 

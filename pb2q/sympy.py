@@ -15,12 +15,12 @@ def fn(self, bra, **options):  # pylint: disable=unused-argument
 OuterProduct._apply_from_right_to = fn
 
 
-class ProductState(StateBase):  # pylint: disable=abstract-method
+class ProductState(StateBase):
     """General abstract quantum product state."""
     _op_priority = 20
 
 
-class ProductKet(ProductState, KetBase):  # pylint: disable=abstract-method
+class ProductKet(ProductState, KetBase):
     """Ket that is interpreted as a tensor product of its argument kets."""
 
     @classmethod
@@ -64,7 +64,7 @@ class ProductKet(ProductState, KetBase):  # pylint: disable=abstract-method
         return Expr.__rmul__(self, other)
 
 
-class ProductBra(ProductState, BraBase):  # pylint: disable=abstract-method
+class ProductBra(ProductState, BraBase):
     """Product Bra in quantum mechanics."""
     @classmethod
     def dual_class(cls):
@@ -105,7 +105,7 @@ class ProductBra(ProductState, BraBase):  # pylint: disable=abstract-method
         return Expr.__rmul__(self, other)
 
 
-class OrthogonalProductKet(OrthogonalKet, ProductKet):  # pylint: disable=abstract-method
+class OrthogonalProductKet(OrthogonalKet, ProductKet):
     """Orthogonal product ket."""
     @classmethod
     def dual_class(cls):
@@ -116,7 +116,7 @@ class OrthogonalProductKet(OrthogonalKet, ProductKet):  # pylint: disable=abstra
         return OrthogonalKet
 
 
-class OrthogonalProductBra(OrthogonalBra, ProductBra):  # pylint: disable=abstract-method
+class OrthogonalProductBra(OrthogonalBra, ProductBra):
     """Orthogonal product ket."""
     @classmethod
     def dual_class(cls):
@@ -134,7 +134,7 @@ class ProductOperatorMixin:
         self.num_subsystems = args[0]
 
 
-class IdentityProduct(ProductOperatorMixin, IdentityOperator):  # pylint: disable=abstract-method
+class IdentityProduct(ProductOperatorMixin, IdentityOperator):
     """Identity operator acting on a tensor product space."""
 
 
@@ -177,7 +177,7 @@ def register_apply(expr: Mul) -> Expr:
     return qapply(Mul(*[to_tensor_product(arg) for arg in expr.args]))
 
 
-class PermutationOperator(Operator):  # pylint: disable=abstract-method
+class PermutationOperator(Operator):
     """Register permutation operator.
 
     Register indices specification works similarly to the numpy `transpose()` function, but unlike
@@ -257,7 +257,7 @@ class PermutationOperator(Operator):  # pylint: disable=abstract-method
         return PermutationOperator.from_swaps(Mul(*swaps.args[::-1]))
 
 
-class SwapOperator(PermutationOperator):  # pylint: disable=abstract-method
+class SwapOperator(PermutationOperator):
     """Register swap operator."""
     is_hermitian = True
 
