@@ -2,14 +2,13 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Union
-from sympy import Add, Expr, S, sqrt
-from sympy.physics.quantum import (Dagger, IdentityOperator, Ket, KetBase, Operator, OrthogonalBra,
-                                   OrthogonalKet, OuterProduct, TensorProduct)
-from sympy.printing.pretty.stringpict import prettyForm
+from sympy import Expr, S
+from sympy.physics.quantum import (Dagger, Ket, Operator, OuterProduct,
+                                   TensorProduct)
 from .field import FieldDefinition
-from .sympy import (IdentityProduct, OrthogonalProductBra, OrthogonalProductKet,
-                    PermutationOperator, ProductKet, to_product_state, to_tensor_product)
-from .representations import UniverseState, FieldState, ParticleState
+from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
+from .representations import (Control, FieldOperator, FieldState, ParticleState, StepSymmetrizer,
+                              UniverseState)
 
 
 class RegisterBase(ABC):
@@ -125,14 +124,16 @@ class Field(CompoundRegister):
         spin: Optional[int] = None,
         **quantum_numbers
     ) -> Operator:
-        ann_op = 0
+        ann_op = S.Zero
         for ipart in range(cls.max_particles):
-            zeroed_particles = cls.max_particles - ipart - 1
-            annihilator_args = list(cls.projection_op(0, zeroed_particles).args)
-            annihilator_args.append(cls.particle.annihilation_op(momentum, spin, **quantum_numbers))
-            annihilator_args.extend(cls.projection_op(1, ipart).args)
-            annihilator = TensorProduct(*annihilator_args)
-            ann_op += annihilator * StepSymmetrizer(cls.particle.size(), ipart + 1)
+            num_unoccupied = cls.max_particles - ipart - 1
+            args = [cls.particle.projection_op(0) for _ in range(num_unoccupied)]
+            args.append(cls.particle.annihilation_op(momentum, spin, **quantum_numbers))
+            args.extend(cls.particle.projection_op(1) for _ in range(ipart))
+            annihilator = FieldOperator(*args)
+            if ipart > 0:
+                annihilator *= StepSymmetrizer(ipart + 1)
+            ann_op += annihilator
 
         return ann_op
 
@@ -144,18 +145,6 @@ class Field(CompoundRegister):
         **quantum_numbers
     ):
         return Dagger(cls.annihilation_op(momentum, spin, **quantum_numbers))
-
-    @classmethod
-    def projection_op(cls, state: int, num_particles: int) -> TensorProduct:
-        if num_particles == 0:
-            return S.One
-        proj = OrthogonalProductKet(state) * OrthogonalProductBra(state)
-        identity = IdentityProduct(cls.particle.size() - 1)
-        args = []
-        for _ in range(num_particles):
-            args.append(proj)
-            args.append(identity)
-        return TensorProduct(*args)
 
 
 class Particle(CompoundRegister):
@@ -237,6 +226,13 @@ class Particle(CompoundRegister):
     ):
         return Dagger(cls.annihilation_op(momentum, spin, **quantum_numbers))
 
+    @classmethod
+    def projection_op(
+        cls,
+        state: int
+    ):
+        return TensorProduct(Control(state, state), IdentityProduct(cls.size() - 1))
+
 
 class Occupancy(Register):
     """Single-bit P/A register."""
@@ -303,168 +299,3 @@ class Spin(Register):
 
 Spin._subclasses.extend(type(f'Spin{i}Hal' + ('f' if i == 1 else 'ves'), (Spin,), {'spin': i})
                         for i in range(1, 4))
-
-
-class Control(OuterProduct):
-    """Control operator for particle registers."""
-    def __new__(cls, *args):
-        if not (len(args) == 2 and all(arg in (0, 1) for arg in args)):
-            raise ValueError(f'Invalid constructor argument {args} for control')
-
-        return super().__new__(cls, OrthogonalKet(args[0]), OrthogonalBra(args[1]))
-
-    def _eval_adjoint(self):
-        return Control(self.args[1].args[0], self.args[0].args[0])
-
-    def _print_operator_name(self, printer, *args):
-        return 'Ctrl'
-
-    def _print_operator_name_pretty(self, printer, *args):
-        return prettyForm('Ctrl')
-
-    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
-        return r'\mathfrak{C}'
-
-    def _sympystr(self, printer, *args):
-        return Operator._sympystr(self, printer, *args)
-
-    def _sympyrepr(self, printer, *args):
-        return Operator._sympyrepr(self, printer, *args)
-
-    def _pretty(self, printer, *args):
-        return Operator._pretty(self, printer, *args)
-
-    def _latex(self, printer, *args):
-        return r'%s_{%s%s}' % (
-            self._print_operator_name_latex(printer, *args),
-            self.args[0].args[0],
-            self.args[1].args[0]
-        )
-
-
-class ParticleSwap(Operator):
-    """Particle-level swap operator implemented as a sympy Operator."""
-    is_hermitian = True
-    is_unitary = True
-
-    @classmethod
-    def default_args(cls):
-        return ('PSWAP',)
-
-    def __new__(cls, *args, **kwargs):
-        if not (len(args) == 3 and all(isinstance(arg, int) for arg in args)):
-            raise ValueError('ParticleSwap requires three integer arguments (particle size, index1,'
-                             ' index2)')
-        return super().__new__(cls, *args, **kwargs)
-
-    def _print_operator_name(self, printer, *args):
-        return 'PSWAP'
-
-    def _print_operator_name_pretty(self, printer, *args):
-        return prettyForm('PSWAP')
-
-    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
-        return r'\mathrm{PSWAP}'
-
-    def _print_contents(self, printer, *args):
-        return (f'{self._print_operator_name(printer, *args)}[{self.args[0]}]'
-                f'({self.args[1]},{self.args[2]})')
-
-    def _print_contents_latex(self, printer, *args):
-        return r'%s_{%s}\left({%s}, {%s}\right)' % (
-            (self._print_operator_name_latex(printer, *args),) + self.args
-        )
-
-    @staticmethod
-    def swap_particles(
-        ket: Union[KetBase, TensorProduct],
-        size: int,
-        index1: int,
-        index2: int
-    ) -> ProductKet:
-        if isinstance(ket, KetBase):
-            ket = to_tensor_product(ket)
-        if not (isinstance(ket, TensorProduct)
-                and all(isinstance(arg, KetBase) and len(arg.args) == 1 for arg in ket.args)):
-            raise ValueError(f'Argument {ket} is not a product state')
-
-        if len(ket.args) <= max(index1, index2) * size:
-            raise ValueError(f'State {ket} is inconsistent with the permutation')
-        new_kets = list(ket.args)
-        for source, dest in zip((index1, index2), (index2, index1)):
-            for ireg in range(size):
-                new_kets[dest * size + ireg] = ket.args[source * size + ireg]
-
-        return to_product_state(TensorProduct(*new_kets))
-
-    def _apply_operator(self, ket: Union[KetBase, TensorProduct], **options) -> ProductKet:
-        return self.swap_particles(ket, *self.args)  # pylint: disable=no-value-for-parameter
-
-    def _eval_inverse(self):
-        return self
-
-    def _eval_rewrite(self, rule, args, **hints):
-        size = args[0]
-        index1, index2 = sorted(args[1:])
-        if rule == Register:
-            return PermutationOperator(*(
-                tuple(range(index2 * size, (index2 + 1) * size))
-                + tuple(range(index1 * size, (index1 + 1) * size))
-            ))
-        return None
-
-
-class StepSymmetrizer(Operator):
-    """Step-symmetrizer of a bosonic field register."""
-    is_hermitian = True
-
-    def __new__(cls, *args, **kwargs):
-        if not (len(args) == 2 and all(isinstance(arg, int) for arg in args)):
-            raise ValueError('StepSymmetrizer requires two integer arguments (particle size,'
-                             ' updated number of particles)')
-        return super().__new__(cls, *args, **kwargs)
-
-    def _print_operator_name(self, printer, *args):
-        return 'S'
-
-    def _print_operator_name_pretty(self, printer, *args):
-        return prettyForm('S')
-
-    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
-        return r'\mathcal{S}'
-
-    def _print_contents(self, printer, *args):
-        return (f'{self._print_operator_name(printer, *args)}[{self.args[0]}]'
-                f'({self.args[1]}<-{self.args[1]-1})')
-
-    def _print_contents_latex(self, printer, *args):
-        return r'%s_{%s}\left({%s}\leftarrow{%s}\right)' % (
-            self._print_operator_name_latex(printer, *args), self.args[0],
-            self.args[1], self.args[1] - 1
-        )
-
-    def _apply_operator(self, ket: Union[KetBase, TensorProduct], **options) -> Expr:
-        particle_size, new_num_particles = self.args  # pylint: disable=unbalanced-tuple-unpacking
-        result_states = [ket]
-        if isinstance(ket, KetBase):
-            ket = to_tensor_product(ket)
-        for ipart in range(new_num_particles - 1):
-            result_states.append(
-                ParticleSwap.swap_particles(ket, particle_size, new_num_particles - 1, ipart)
-            )
-        return Add(*result_states) / sqrt(new_num_particles)
-
-    def _eval_inverse(self):
-        return self
-
-    def _eval_rewrite(self, rule, args, **hints):
-        particle_size, new_num_particles = self.args  # pylint: disable=unbalanced-tuple-unpacking
-        if rule == ParticleSwap:
-            if new_num_particles == 1:
-                return IdentityOperator()
-
-            ops = [IdentityOperator()]
-            ops += [ParticleSwap(particle_size, new_num_particles - 1, ipart)
-                    for ipart in range(new_num_particles - 1)]
-            return Add(*ops) / sqrt(new_num_particles)
-        return None

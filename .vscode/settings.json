@@ -1,5 +1,8 @@
 {
     "python.analysis.extraPaths": [
         "/usr/local/lib/python3.10/dist-packages"
+    ],
+    "pylint.args": [
+        "--disable=abstract-method,protected-access,arguments-renamed"
     ]
 }
