@@ -1,10 +1,12 @@
 """State and operator representations as sympy objects."""
 
 from collections.abc import Sequence
-from sympy import Add, Expr, Pow, sqrt, sympify
+from typing import Union
+from sympy import Add, Expr, Mul, Pow, S, sqrt, sympify
 from sympy.core.containers import Tuple
-from sympy.physics.quantum import (Dagger, IdentityOperator, KetBase, Operator, OrthogonalBra,
-                                   OrthogonalKet, OuterProduct, TensorProduct)
+from sympy.physics.quantum import (BraBase, Dagger, IdentityOperator, KetBase, Operator,
+                                   OrthogonalBra, OrthogonalKet, OuterProduct, TensorProduct,
+                                   qapply, tensor_product_simp)
 from sympy.printing.pretty.stringpict import prettyForm
 
 from .sympy import OrthogonalProductKet, ProductKet
@@ -49,9 +51,12 @@ class UniverseState(TensorProduct, KetBase):
 class FieldState(TensorProduct, KetBase):
     """TensorProduct of ParticleStates."""
     def __new__(cls, *args):
-        if not all(isinstance(arg, ParticleState) for arg in args):
-            raise ValueError(f'FieldState must be a product of ParticleStates, got {args}')
-        return super().__new__(cls, *args)
+        if len(args) == 1 and isinstance(args[0], TensorProduct):
+            args = args[0].args
+        if all(isinstance(arg, TensorProduct) for arg in args):
+            return super().__new__(cls, *[ParticleState(arg) for arg in args])
+
+        raise ValueError(f'FieldState must be a product of ParticleStates, got {args}')
 
     def _sympystr(self, printer, *args):
         return 'x'.join(('{%s}' % arg._sympystr(printer, *args)) for arg in self.args)
@@ -109,6 +114,52 @@ class FieldOperator(TensorProduct):
                                for arg in self.args)
 
 
+def apply_field_op(expr: Mul):
+    """Expand the product and apply tensor_product_simp + qapply on each term, then reinterpret as
+    field state / op."""
+    if not isinstance(expr, Mul):
+        return expr
+
+    output_args = []
+    for term in expr.expand().args:
+        if not isinstance(term, Mul):
+            output_args.append(term)
+            continue
+
+        output_term = S.One
+        tps = []
+        for factor in term.args:
+            if isinstance(factor, TensorProduct):
+                tps.append(factor)
+            elif len(tps) != 0:
+                output_term *= tensor_product_simp(Mul(*tps))
+                tps = []
+            else:
+                output_term *= factor
+        if len(tps) != 0:
+            output_term *= tensor_product_simp(Mul(*tps))
+
+        output_args.append(qapply(output_term))
+
+    return Add(*output_args)
+
+
+def as_field_state(expr: Add):
+    """Convert a linear combination of TensorProducts to a linear combination of FieldStates."""
+    if isinstance(expr, Add):
+        terms = expr.args
+    else:
+        terms = [expr]
+
+    output_args = []
+    for term in terms:
+        # term is coefficient * tp
+        c_part, new_args = TensorProduct.flatten(sympify((term,)))
+        output_args.append(Mul(*c_part) * FieldState(new_args[0]))
+
+    return Add(*output_args)
+
+
 class ParticleState(TensorProduct, KetBase):
     """TensorProduct of a presence ket and a quantum number product ket."""
     def __new__(cls, *args):
@@ -151,10 +202,15 @@ class ParticleState(TensorProduct, KetBase):
 class Control(OuterProduct):
     """Control operator for particle registers."""
     def __new__(cls, *args):
-        if not (len(args) == 2 and all(arg in (0, 1) for arg in args)):
-            raise ValueError(f'Invalid constructor argument {args} for control')
+        if len(args) != 2:
+            raise ValueError(f'Number of arguments to Control != 2: {args}')
+        if all(arg in (0, 1) for arg in args):
+            return super().__new__(cls, OrthogonalKet(args[0]), OrthogonalBra(args[1]))
+        if (isinstance(args[0], KetBase) and args[0].args[0] in (0, 1)
+                and isinstance(args[1], BraBase) and args[1].args[0] in (0, 1)):
+            return super().__new__(cls, *args)
 
-        return super().__new__(cls, OrthogonalKet(args[0]), OrthogonalBra(args[1]))
+        raise ValueError(f'Invalid constructor argument {args} for control')
 
     def _eval_adjoint(self):
         return Control(self.args[1].args[0], self.args[0].args[0])
@@ -211,7 +267,7 @@ class ParticleSwap(Operator):
         return r'\mathrm{PSWAP}'
 
     def _print_contents(self, printer, *args):
-        return (f'{self._print_operator_name(printer, *args)}({self.args[0]},{self.args[1]})')
+        return f'{self._print_operator_name(printer, *args)}({self.args[0]},{self.args[1]})'
 
     def _print_contents_latex(self, printer, *args):
         return r'%s\left({%s}, {%s}\right)' % (
@@ -220,14 +276,14 @@ class ParticleSwap(Operator):
 
     @staticmethod
     def swap_particles(
-        state: FieldState,
+        state: Union[FieldState, FieldOperator],
         index1: int,
         index2: int
     ) -> FieldState:
         particle_states = list(state.args)
         particle_states[index1] = state.args[index2]
         particle_states[index2] = state.args[index1]
-        return FieldState(*particle_states)
+        return state.func(*particle_states)
 
     def _apply_operator(self, state: FieldState, **options) -> ProductKet:
         return self.swap_particles(state, *self.args)  # pylint: disable=no-value-for-parameter
