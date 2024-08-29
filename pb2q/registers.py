@@ -7,8 +7,8 @@ from sympy.physics.quantum import (Dagger, Ket, Operator, OuterProduct,
                                    TensorProduct)
 from .field import FieldDefinition
 from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
-from .representations import (Control, FieldOperator, FieldState, ParticleState, StepSymmetrizer,
-                              UniverseState)
+from .representations import (Control, FieldOperator, FieldState, ParticleState,
+                              StepAntisymmetrizer, StepSymmetrizer, UniverseState)
 
 
 class RegisterBase(ABC):
@@ -132,7 +132,10 @@ class Field(CompoundRegister):
             args.extend(cls.particle.projection_op(1) for _ in range(ipart))
             annihilator = FieldOperator(*args)
             if ipart > 0:
-                annihilator *= StepSymmetrizer(ipart + 1)
+                if cls.spin.spin % 2 == 0:
+                    annihilator *= StepSymmetrizer(ipart + 1)
+                else:
+                    annihilator *= StepAntisymmetrizer(ipart + 1)
             ann_op += annihilator
 
         return ann_op
@@ -204,13 +207,20 @@ class Particle(CompoundRegister):
     ) -> Expr:
         if not isinstance(momentum, tuple):
             momentum = (momentum,)
+
         # control = OuterProduct(OrthogonalKet(0), OrthogonalBra(1))
         control = Control(0, 1)
         source_labels = momentum
-        if spin is not None:
+        if cls.field.spin is not None:
+            if spin is None:
+                raise ValueError('Spin value missing')
             source_labels += (spin,)
-        source_labels += tuple(quantum_numbers[reg_cls.__name__]
-                               for reg_cls in cls.field.quantum_numbers)
+        try:
+            source_labels += tuple(quantum_numbers[reg_cls.__name__]
+                                   for reg_cls in cls.field.quantum_numbers)
+        except KeyError as exc:
+            raise ValueError('Quantum number missing') from exc
+
         scrap = OuterProduct(
             OrthogonalProductKet(*((0,) * len(source_labels))),
             OrthogonalProductBra(*source_labels)

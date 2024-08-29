@@ -295,28 +295,20 @@ class ParticleSwap(Operator):
         return self
 
 
-class StepSymmetrizer(Operator):
-    """Step-symmetrizer of a bosonic field register."""
+class StepSymmetrizerBase(Operator):
+    """Step-(anti)symmetrizer of a bosonic (fermionic) field register."""
     is_hermitian = True
+    _sign = 0
 
     def __new__(cls, *args, **kwargs):
         args = sympify(args)
         if not (len(args) == 1 and args[0].is_integer and args[0] > 0):
-            raise ValueError('StepSymmetrizer requires one integer argument (updated number of'
-                             ' particles)')
+            raise ValueError('Step(Anti)Symmetrizer requires one integer argument (updated number'
+                             ' of particles)')
         if args[0] == 1:
             return IdentityOperator()
 
         return super().__new__(cls, *args, **kwargs)
-
-    def _print_operator_name(self, printer, *args):
-        return 'S'
-
-    def _print_operator_name_pretty(self, printer, *args):
-        return prettyForm('S')
-
-    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
-        return r'\mathcal{S}'
 
     def _print_contents(self, printer, *args):
         return f'{self._print_operator_name(printer, *args)}({self.args[0]}<-{self.args[0]-1})'
@@ -331,7 +323,7 @@ class StepSymmetrizer(Operator):
         result_states = [state]
         for ipart in range(new_num - 1):
             result_states.append(
-                ParticleSwap.swap_particles(state, new_num - 1, ipart)
+                self._sign * ParticleSwap.swap_particles(state, new_num - 1, ipart)
             )
         return Add(*result_states) / sqrt(new_num)
 
@@ -345,6 +337,34 @@ class StepSymmetrizer(Operator):
                 return IdentityOperator()
 
             ops = [IdentityOperator()]
-            ops += [ParticleSwap(new_num - 1, ipart) for ipart in range(new_num - 1)]
+            ops += [self._sign * ParticleSwap(new_num - 1, ipart) for ipart in range(new_num - 1)]
             return Add(*ops) / sqrt(new_num)
         return None
+
+
+class StepSymmetrizer(StepSymmetrizerBase):
+    """Step-symmetrizer of a bosonic field register."""
+    _sign = 1
+
+    def _print_operator_name(self, printer, *args):
+        return 'S'
+
+    def _print_operator_name_pretty(self, printer, *args):
+        return prettyForm('S')
+
+    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\mathcal{S}'
+
+
+class StepAntisymmetrizer(StepSymmetrizerBase):
+    """Step-antisymmetrizer of a fermionic field register."""
+    _sign = -1
+
+    def _print_operator_name(self, printer, *args):
+        return 'A'
+
+    def _print_operator_name_pretty(self, printer, *args):
+        return prettyForm('A')
+
+    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\mathcal{A}'
