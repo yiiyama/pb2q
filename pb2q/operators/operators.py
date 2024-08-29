@@ -7,8 +7,8 @@ from sympy.physics.quantum import (BraBase, Dagger, IdentityOperator, KetBase, O
                                    qapply, tensor_product_simp)
 from sympy.printing.pretty.stringpict import prettyForm
 
-from .sympy import ProductKet
-from .states import FieldState
+from ..sympy import ProductKet
+from ..states import FieldState
 
 
 class FieldOperator(TensorProduct):
