@@ -63,6 +63,7 @@ def apply_field_op(expr: Mul):
         if len(tps) != 0:
             output_term *= tensor_product_simp(Mul(*tps))
 
+        print(output_term)
         output_args.append(qapply(output_term))
 
     return Add(*output_args)

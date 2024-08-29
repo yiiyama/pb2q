@@ -46,10 +46,6 @@ class Register(RegisterBase):
 
 class CompoundRegister(RegisterBase):
     """A register that consists of other registers."""
-    @classmethod
-    def initial_state(cls) -> Expr:
-        return OrthogonalProductKet(*((0,) * cls.size()))
-
     def interpret(self, state: Expr) -> str:  # pylint: disable=unused-argument
         return ''
 
@@ -156,12 +152,20 @@ class Particle(CompoundRegister):
 
     @classmethod
     def size(cls) -> int:
-        return (1 + int(cls.field.spin is not None) + cls.field.momentum.spatial_dimension
-                + len(cls.field.quantum_numbers))
+        # Momentum counts as one register
+        return (2 + int(cls.field.spin is not None) + len(cls.field.quantum_numbers))
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return ParticleState(0, (0,) * (cls.size() - 1))
+        return ParticleState(0, cls.initial_state_args())
+
+    @classmethod
+    def initial_state_args(cls) -> tuple:
+        arg1 = (cls.field.momentum.zero_state_args(),)
+        if cls.field.spin is not None:
+            arg1 += (0,)
+        arg1 += (0,) * len(cls.field.quantum_numbers)
+        return arg1
 
     def __init__(
         self,
@@ -210,7 +214,7 @@ class Particle(CompoundRegister):
 
         # control = OuterProduct(OrthogonalKet(0), OrthogonalBra(1))
         control = Control(0, 1)
-        source_labels = momentum
+        source_labels = (momentum,)
         if cls.field.spin is not None:
             if spin is None:
                 raise ValueError('Spin value missing')
@@ -222,7 +226,7 @@ class Particle(CompoundRegister):
             raise ValueError('Quantum number missing') from exc
 
         scrap = OuterProduct(
-            OrthogonalProductKet(*((0,) * len(source_labels))),
+            OrthogonalProductKet(*cls.initial_state_args()),
             OrthogonalProductBra(*source_labels)
         )
         return TensorProduct(control, scrap)
@@ -271,11 +275,19 @@ class Momentum(CompoundRegister):
 
     @classmethod
     def size(cls) -> int:
-        return cls.spatial_dimension
+        return 1
+
+    @classmethod
+    def initial_state(cls) -> Ket:
+        return OrthogonalProductKet(*cls.zero_state_args())
 
     @classmethod
     def of_dimension(cls, spatial_dimension: int) -> type['Momentum']:
         return cls._subclasses[spatial_dimension - 1]
+
+    @classmethod
+    def zero_state_args(cls) -> tuple[int, ...]:
+        return (0,) * cls.spatial_dimension
 
     def __init__(self):
         super().__init__()
