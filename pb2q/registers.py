@@ -7,8 +7,8 @@ from sympy.physics.quantum import (Dagger, Ket, Operator, OuterProduct,
                                    TensorProduct)
 from .field import FieldDefinition
 from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
-from .states import (Control, FieldOperator, FieldState, ParticleState, StepAntisymmetrizer,
-                     StepSymmetrizer, UniverseState)
+from .states import FieldState, ParticleState, UniverseState
+from .operators import Control, FieldOperator, StepAntisymmetrizer, StepSymmetrizer
 
 
 class RegisterBase(ABC):
