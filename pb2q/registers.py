@@ -8,127 +8,108 @@ from .field import FieldDefinition
 from .momentum import MomentumKet
 from .operators import Control, FieldOperator, StepAntisymmetrizer, StepSymmetrizer
 from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
-from .states import FieldKet, ParticleKet, UniverseKet, NullKet
+from .states import FieldKet, NullKet, ParticleKet, QNumberKet, UniverseKet
 
 
 class RegisterBase(ABC):
     """Base register class."""
-    @classmethod
-    @abstractmethod
-    def size(cls) -> int:
-        """Return the total number of physical registers."""
-
-    @classmethod
-    @abstractmethod
-    def initial_state(cls) -> Expr:
-        """Return the zero state."""
-
-    def __init__(self):
-        self._name = type(self).__name__
+    def __init__(self, name: str):
+        self._name = name
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
+
+    @property
+    def size(self) -> int:
+        """Return the total number of physical registers."""
+        return None
+
+    @abstractmethod
+    def null_state(self) -> Expr:
+        """Return the zero state."""
+
+    def interpret(self, state: Expr) -> str:  # pylint: disable=unused-argument
+        """Give a representation string of a register state."""
+        return ''
 
 
 class Register(RegisterBase):
     """Fixed-dimension register class."""
-    dimension: int = 0
-
-    @classmethod
-    def size(cls) -> int:
+    @property
+    def size(self) -> int:
         return 1
-
-    @classmethod
-    def initial_state(cls) -> Expr:
-        return OrthogonalProductKet(0)
 
 
 class CompoundRegister(RegisterBase):
     """A register that consists of other registers."""
-    def interpret(self, state: Expr) -> str:  # pylint: disable=unused-argument
-        return ''
 
 
 class Universe(CompoundRegister):
     """Total physical register."""
-    _singleton: 'Universe' = None
-
-    @classmethod
-    def size(cls) -> int:
-        return sum(field.size() for field in cls._singleton.fields.values())
-
-    @classmethod
-    def initial_state(cls) -> Expr:
-        return UniverseKet(*[field.initial_state() for field in cls._singleton.fields.values()])
-
     def __init__(
         self,
-        fields: list[FieldDefinition],
+        fields: list[Union['Field', FieldDefinition]],
         spatial_dimension: int
     ):
-        super().__init__()
+        super().__init__('Universe')
         self.spatial_dimension = spatial_dimension
-        self.fields = {definition.name: self.make_field(definition) for definition in fields}
-        Universe._singleton = self
+        self.fields = {f.name: f if isinstance(f, Field) else Field(f) for f in fields}
 
-    def make_field(self, definition: FieldDefinition) -> 'Field':
-        momentum = Momentum.of_dimension(self.spatial_dimension)
-        spin = Spin.of_spin(definition.spin)
-        quantum_numbers = [type(name, (Register,), {'dimension': dimension})
-                           for name, dimension in definition.quantum_numbers]
-        attributes = {'momentum': momentum}
-        if spin is not None:
-            attributes['spin'] = spin
-        attributes.update({
-            'quantum_numbers': quantum_numbers,
-            'max_particles': definition.max_particles
-        })
-        field_cls = type(definition.name, (Field,), attributes)
+    @property
+    def size(self) -> int:
+        return sum(field.size() for field in self.fields.values())
 
-        particle_cls = type(definition.name + 'Particle', (Particle,), {'field': field_cls})
-        field_cls.particle = particle_cls
-
-        return field_cls()
+    def null_state(self) -> Expr:
+        return UniverseKet(*[field.null_state() for field in self.fields.values()])
 
 
 class Field(CompoundRegister):
     """Register for a single field species."""
-    momentum: type['Momentum'] = None
-    spin: type['Spin'] = None
-    quantum_numbers: list[type['Register']] = None
-    max_particles: int = None
-    particle: type['Particle'] = None
+    def __init__(
+        self,
+        definition: FieldDefinition,
+        universe: Optional[Universe] = None,
+        spatial_dimension: Optional[int] = None
+    ):
+        super().__init__(definition.name)
+        if universe:
+            self._universe = universe
+        else:
+            if not spatial_dimension:
+                raise ValueError('Field needs a spatial dimension if not given a universe')
+            self._universe = Universe([self], spatial_dimension)
 
-    @classmethod
-    def size(cls) -> int:
-        return cls.particle.size() * cls.max_particles
+        self.max_particles = definition.max_particles
+        self.momentum = Momentum(self._universe.spatial_dimension)
+        self.spin = Spin(definition.spin)
+        self.quantum_numbers = {name: QNumber(name, dim)
+                                for name, dim in definition.quantum_numbers}
 
-    @classmethod
-    def initial_state(cls) -> Expr:
-        return FieldKet(*[NullKet() for _ in range(cls.max_particles)])
+        self.particle = Particle(self)
 
-    def __init__(self):
-        super().__init__()
-        # pylint: disable-next=not-callable
-        self.particles = [self.particle(index=ipart) for ipart in range(self.max_particles)]
+    @property
+    def size(self) -> int:
+        return self.particle.size * self.max_particles
 
-    @classmethod
+    def null_state(self) -> Expr:
+        return FieldKet(*[NullKet() for _ in range(self.max_particles)])
+
     def annihilation_op(
-        cls,
+        self,
         momentum: tuple[int, ...],
         spin: Optional[int] = None,
         **quantum_numbers
     ) -> Operator:
         ann_op = S.Zero
-        for ipart in range(cls.max_particles):
-            num_unoccupied = cls.max_particles - ipart - 1
-            args = [cls.particle.projection_op(0) for _ in range(num_unoccupied)]
-            args.append(cls.particle.annihilation_op(momentum, spin, **quantum_numbers))
-            args.extend(cls.particle.projection_op(1) for _ in range(ipart))
+        for ipart in range(self.max_particles):
+            num_unoccupied = self.max_particles - ipart - 1
+            args = [self.particle.projection_op(0) for _ in range(num_unoccupied)]
+            args.append(self.particle.annihilation_op(momentum, spin, **quantum_numbers))
+            args.extend(self.particle.projection_op(1) for _ in range(ipart))
             annihilator = FieldOperator(*args)
             if ipart > 0:
-                if cls.spin.spin % 2 == 0:
+                if self.spin.spin % 2 == 0:
                     annihilator *= StepSymmetrizer(ipart + 1)
                 else:
                     annihilator *= StepAntisymmetrizer(ipart + 1)
@@ -136,76 +117,46 @@ class Field(CompoundRegister):
 
         return ann_op
 
-    @classmethod
     def creation_op(
-        cls,
+        self,
         momentum: tuple[int, ...],
         spin: Optional[int] = None,
         **quantum_numbers
     ):
-        return Dagger(cls.annihilation_op(momentum, spin, **quantum_numbers))
+        return Dagger(self.annihilation_op(momentum, spin, **quantum_numbers))
 
 
 class Particle(CompoundRegister):
     """Register for a single particle."""
-    field: 'Field' = None
-
-    @classmethod
-    def size(cls) -> int:
-        # Momentum counts as one register
-        return (2 + int(cls.field.spin is not None) + len(cls.field.quantum_numbers))
-
-    @classmethod
-    def initial_state(cls) -> Expr:
-        return ParticleKet(0, *cls.initial_state_args())
-
-    @classmethod
-    def initial_state_args(cls) -> tuple[tuple[int, ...], tuple[int, ...]]:
-        momentum = cls.field.momentum.zero_state_args()
-        qnumber = ()
-        if cls.field.spin is not None:
-            qnumber += (0,)
-        qnumber += (0,) * len(cls.field.quantum_numbers)
-        return momentum, qnumber
-
     def __init__(
         self,
-        index: Optional[int] = None
+        field: Union[Field, FieldDefinition],
+        spatial_dimension: Optional[int] = None
     ):
-        super().__init__()
-        if index is not None:
-            self._name += f'[{index}]'
-
-        self.index = index
-
-        self.registers = [
-            Occupancy(),
-            self.field.momentum()
-        ]
-        if self.field.spin is not None:
-            self.registers.append(self.field.spin())
-        self.registers.extend(reg_cls() for reg_cls in self.field.quantum_numbers)
+        super().__init__(f'{field.name}Particle')
+        if isinstance(field, Field):
+            self._field = field
+        else:
+            self._field = Field(field, spatial_dimension=spatial_dimension)
 
     @property
-    def occupancy(self) -> Register:
-        return self.registers[0]
+    def size(self) -> int:
+        # Momentum counts as one register
+        return (2 + int(self._field.spin.spin != 0) + len(self._field.quantum_numbers))
 
-    @property
-    def momentum(self) -> Register:
-        return self.registers[1]
+    def null_state(self) -> Expr:
+        return ParticleKet(0, *self.null_state_args())
 
-    @property
-    def spin(self) -> Register:
-        if self.field.spin is None:
-            return None
-        return self.registers[2]
+    def null_state_args(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        momentum = self._field.momentum.null_state_args()
+        qnumber = ()
+        if self._field.spin.spin != 0:
+            qnumber += (0,)
+        qnumber += (0,) * len(self._field.quantum_numbers)
+        return momentum, qnumber
 
-    def quantum_number(self, name) -> Register:
-        return next(reg for reg in self.registers if reg.name == name)
-
-    @classmethod
     def annihilation_op(
-        cls,
+        self,
         momentum: Union[int, tuple[int, ...]],
         spin: Optional[int] = None,
         **quantum_numbers
@@ -216,85 +167,64 @@ class Particle(CompoundRegister):
         # control = OuterProduct(OrthogonalKet(0), OrthogonalBra(1))
         control = Control(0, 1)
         source_labels = momentum
-        if cls.field.spin is not None:
+        if self._field.spin.spin != 0:
             if spin is None:
                 raise ValueError('Spin value missing')
             source_labels += (spin,)
         try:
-            source_labels += tuple(quantum_numbers[reg_cls.__name__]
-                                   for reg_cls in cls.field.quantum_numbers)
+            source_labels += tuple(quantum_numbers[name] for name in self._field.quantum_numbers)
         except KeyError as exc:
             raise ValueError('Quantum number missing') from exc
 
         scrap = OuterProduct(
-            OrthogonalProductKet(*cls.initial_state_args()),
+            OrthogonalProductKet(*self.null_state_args()),
             OrthogonalProductBra(*source_labels)
         )
         return TensorProduct(control, scrap)
 
-    @classmethod
     def creation_op(
-        cls,
+        self,
         momentum: Union[int, tuple[int, ...]],
         spin: Optional[int] = None,
         **quantum_numbers
     ):
-        return Dagger(cls.annihilation_op(momentum, spin, **quantum_numbers))
+        return Dagger(self.annihilation_op(momentum, spin, **quantum_numbers))
 
-    @classmethod
     def projection_op(
-        cls,
+        self,
         state: int
     ):
-        return TensorProduct(Control(state, state), IdentityProduct(cls.size() - 1))
-
-
-class Occupancy(Register):
-    """Single-bit P/A register."""
-    dimension = 2
+        return TensorProduct(Control(state, state), IdentityProduct(self.size - 1))
 
 
 class Momentum(Register):
     """Momentum register."""
-    spatial_dimension: int = None
-    _subclasses = []
+    def __init__(self, spatial_dimension: int):
+        super().__init__('Momentum')
+        self.spatial_dimension = spatial_dimension
 
-    @classmethod
-    def initial_state(cls) -> Ket:
-        return MomentumKet(*cls.zero_state_args())
+    def null_state(self) -> Ket:
+        return MomentumKet(*self.null_state_args())
 
-    @classmethod
-    def of_dimension(cls, spatial_dimension: int) -> type['Momentum']:
-        return cls._subclasses[spatial_dimension - 1]
-
-    @classmethod
-    def zero_state_args(cls) -> tuple[int, ...]:
-        return (0,) * cls.spatial_dimension
-    
-    def __init__(self):
-        super().__init__()
-        self._name = 'Momentum'
+    def null_state_args(self) -> tuple[int, ...]:
+        return (0,) * self.spatial_dimension
 
 
-Momentum._subclasses.extend(type(f'Momentum{i}D', (Momentum,), {'spatial_dimension': i})
-                            for i in range(1, 4))
+class QNumber(Register):
+    """Generic quantum number register."""
+    def __init__(self, name: str, dim: int):
+        super().__init__(name)
+        self.dim = dim
+
+    def null_state(self) -> Ket:
+        return QNumberKet(0)
 
 
-class Spin(Register):
+class Spin(QNumber):
     """Spin register."""
-    spin: int = None
-    _subclasses = []
+    def __init__(self, spin: int):
+        super().__init__('Spin', spin + 1)
 
-    @classmethod
-    def of_spin(cls, spin: int) -> type['Spin']:
-        if spin == 0:
-            return None
-        return cls._subclasses[spin - 1]
-
-    def __init__(self):
-        super().__init__()
-        self._name = 'Spin'
-
-
-Spin._subclasses.extend(type(f'Spin{i}Hal' + ('f' if i == 1 else 'ves'), (Spin,), {'spin': i})
-                        for i in range(1, 4))
+    @property
+    def spin(self) -> int:
+        return self.dim - 1
