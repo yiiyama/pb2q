@@ -3,12 +3,12 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 from sympy import Expr, S
-from sympy.physics.quantum import (Dagger, Ket, Operator, OuterProduct,
-                                   TensorProduct)
+from sympy.physics.quantum import Dagger, Ket, Operator, OuterProduct, TensorProduct
 from .field import FieldDefinition
-from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
-from .states import FieldState, ParticleState, UniverseState
+from .momentum import MomentumKet
 from .operators import Control, FieldOperator, StepAntisymmetrizer, StepSymmetrizer
+from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
+from .states import FieldKet, ParticleKet, UniverseKet, NullKet
 
 
 class RegisterBase(ABC):
@@ -60,7 +60,7 @@ class Universe(CompoundRegister):
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return UniverseState(*[field.initial_state() for field in cls._singleton.fields.values()])
+        return UniverseKet(*[field.initial_state() for field in cls._singleton.fields.values()])
 
     def __init__(
         self,
@@ -106,7 +106,7 @@ class Field(CompoundRegister):
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return FieldState(*[cls.particle.initial_state() for _ in range(cls.max_particles)])
+        return FieldKet(*[NullKet() for _ in range(cls.max_particles)])
 
     def __init__(self):
         super().__init__()
@@ -157,15 +157,16 @@ class Particle(CompoundRegister):
 
     @classmethod
     def initial_state(cls) -> Expr:
-        return ParticleState(0, cls.initial_state_args())
+        return ParticleKet(0, *cls.initial_state_args())
 
     @classmethod
-    def initial_state_args(cls) -> tuple:
-        arg1 = (cls.field.momentum.zero_state_args(),)
+    def initial_state_args(cls) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        momentum = cls.field.momentum.zero_state_args()
+        qnumber = ()
         if cls.field.spin is not None:
-            arg1 += (0,)
-        arg1 += (0,) * len(cls.field.quantum_numbers)
-        return arg1
+            qnumber += (0,)
+        qnumber += (0,) * len(cls.field.quantum_numbers)
+        return momentum, qnumber
 
     def __init__(
         self,
@@ -214,7 +215,7 @@ class Particle(CompoundRegister):
 
         # control = OuterProduct(OrthogonalKet(0), OrthogonalBra(1))
         control = Control(0, 1)
-        source_labels = (momentum,)
+        source_labels = momentum
         if cls.field.spin is not None:
             if spin is None:
                 raise ValueError('Spin value missing')
@@ -253,33 +254,14 @@ class Occupancy(Register):
     dimension = 2
 
 
-class MomentumComponent(RegisterBase):
-    """Single momentum component."""
-    @classmethod
-    def size(cls) -> int:
-        return 1
-
-    @classmethod
-    def initial_state(cls) -> Ket:
-        return OrthogonalProductKet(0)
-
-    def __init__(self, dname: str):
-        super().__init__()
-        self._name = 'Momentum_' + dname
-
-
-class Momentum(CompoundRegister):
+class Momentum(Register):
     """Momentum register."""
     spatial_dimension: int = None
     _subclasses = []
 
     @classmethod
-    def size(cls) -> int:
-        return 1
-
-    @classmethod
     def initial_state(cls) -> Ket:
-        return OrthogonalProductKet(*cls.zero_state_args())
+        return MomentumKet(*cls.zero_state_args())
 
     @classmethod
     def of_dimension(cls, spatial_dimension: int) -> type['Momentum']:
@@ -288,15 +270,10 @@ class Momentum(CompoundRegister):
     @classmethod
     def zero_state_args(cls) -> tuple[int, ...]:
         return (0,) * cls.spatial_dimension
-
+    
     def __init__(self):
         super().__init__()
         self._name = 'Momentum'
-        self.components = [MomentumComponent(dname)
-                           for dname in ['x', 'y', 'z'][:self.spatial_dimension]]
-
-    def __getitem__(self, index) -> MomentumComponent:
-        return self.components[index]
 
 
 Momentum._subclasses.extend(type(f'Momentum{i}D', (Momentum,), {'spatial_dimension': i})
