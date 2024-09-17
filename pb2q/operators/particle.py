@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name, unused-argument
 """Particle-level operator representations as sympy objects."""
 from sympy import Expr, S
 from sympy.physics.quantum import (BraBase, KetBase, Operator, OrthogonalBra, OrthogonalKet,
@@ -48,21 +49,22 @@ class Control(OuterProduct):
             self.args[0].args[0],
             self.args[1].args[0]
         )
-    
+
 
 class PresenceProjection(Operator):
+    """Projector to the occupied state of a particle register."""
     is_hermitian = True
     is_unitary = False
 
     def __new__(cls):
         return super().__new__(cls)
-    
+
     def _apply_operator_NullKet(self, ket, **options):
         return S.Zero
-    
+
     def _apply_operator_ParticleKet(self, ket, **options):
         return ket
-    
+
     def _apply_from_right_to(self, bra, **options):
         if isinstance(bra, NullBra):
             return S.Zero
@@ -71,6 +73,7 @@ class PresenceProjection(Operator):
 
 
 class AbsenceProjection(Operator):
+    """Projector to the unoccupied state of a particle register."""
     is_hermitian = True
     is_unitary = False
 
@@ -79,10 +82,10 @@ class AbsenceProjection(Operator):
 
     def _apply_operator_NullKet(self, ket, **options):
         return ket
-    
+
     def _apply_operator_ParticleKet(self, ket, **options):
         return S.Zero
-    
+
     def _apply_from_right_to(self, bra, **options):
         if isinstance(bra, NullBra):
             return bra

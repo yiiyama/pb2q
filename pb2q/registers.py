@@ -3,11 +3,11 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 from sympy import Expr, S
-from sympy.physics.quantum import Dagger, Ket, Operator, OuterProduct, TensorProduct
+from sympy.physics.quantum import Dagger, Ket, Operator, OuterProduct
 from .field import FieldDefinition
 from .momentum import MomentumKet
-from .operators import Control, FieldOperator, StepAntisymmetrizer, StepSymmetrizer
-from .sympy import IdentityProduct, OrthogonalProductBra, OrthogonalProductKet
+from .operators import (PresenceProjection, AbsenceProjection, FieldOperator, StepAntisymmetrizer,
+                        StepSymmetrizer)
 from .states import FieldKet, NullKet, ParticleKet, QNumberKet, UniverseKet
 
 
@@ -110,9 +110,12 @@ class Field(CompoundRegister):
         ann_op = S.Zero
         for ipart in range(self.max_particles):
             num_unoccupied = self.max_particles - ipart - 1
-            args = [self.particle.projection_op(0) for _ in range(num_unoccupied)]
-            args.append(self.particle.annihilation_op(momentum, spin, **quantum_numbers))
-            args.extend(self.particle.projection_op(1) for _ in range(ipart))
+            args = [AbsenceProjection() for _ in range(num_unoccupied)]
+            args.append(
+                OuterProduct(self.particle.null_state(),
+                             self.particle.state(momentum, spin, **quantum_numbers))
+            )
+            args.extend(PresenceProjection() for _ in range(ipart))
             annihilator = FieldOperator(*args)
             if ipart > 0:
                 if self.spin.spin % 2 == 0:
