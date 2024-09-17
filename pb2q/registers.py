@@ -92,8 +92,14 @@ class Field(CompoundRegister):
     def size(self) -> int:
         return self.particle.size * self.max_particles
 
+    def state(self, args: list[tuple]) -> Expr:
+        if (num_null := self.max_particles - len(args)) < 0:
+            raise ValueError('Too many particle state arguments')
+        return FieldKet(*([self.particle.null_state() for _ in range(num_null)]
+                          + [self.particle.state(*arg) for arg in args]))
+
     def null_state(self) -> Expr:
-        return FieldKet(*[NullKet() for _ in range(self.max_particles)])
+        return self.state([])
 
     def annihilation_op(
         self,
@@ -144,8 +150,29 @@ class Particle(CompoundRegister):
         # Momentum counts as one register
         return (2 + int(self._field.spin.spin != 0) + len(self._field.quantum_numbers))
 
+    def state(
+        self,
+        momentum: Union[int, tuple[int, ...]],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Expr:
+        if isinstance(momentum, int):
+            momentum = (momentum,)
+        qnumber = ()
+        if self._field.spin.spin != 0:
+            if (spin is None or abs(spin) > self._field.spin.spin
+                    or spin % 2 != self._field.spin.spin % 2):
+                raise ValueError(f'Invalid spin value {spin}')
+            qnumber = (spin,)
+        try:
+            qnumber += tuple(quantum_numbers[name] for name in self._field.quantum_numbers)
+        except KeyError as exc:
+            raise ValueError('Quantum number missing') from exc
+
+        return ParticleKet(momentum, qnumber)
+
     def null_state(self) -> Expr:
-        return ParticleKet(0, *self.null_state_args())
+        return NullKet()
 
     def null_state_args(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
         momentum = self._field.momentum.null_state_args()
@@ -154,47 +181,6 @@ class Particle(CompoundRegister):
             qnumber += (0,)
         qnumber += (0,) * len(self._field.quantum_numbers)
         return momentum, qnumber
-
-    def annihilation_op(
-        self,
-        momentum: Union[int, tuple[int, ...]],
-        spin: Optional[int] = None,
-        **quantum_numbers
-    ) -> Expr:
-        if not isinstance(momentum, tuple):
-            momentum = (momentum,)
-
-        # control = OuterProduct(OrthogonalKet(0), OrthogonalBra(1))
-        control = Control(0, 1)
-        source_labels = momentum
-        if self._field.spin.spin != 0:
-            if spin is None:
-                raise ValueError('Spin value missing')
-            source_labels += (spin,)
-        try:
-            source_labels += tuple(quantum_numbers[name] for name in self._field.quantum_numbers)
-        except KeyError as exc:
-            raise ValueError('Quantum number missing') from exc
-
-        scrap = OuterProduct(
-            OrthogonalProductKet(*self.null_state_args()),
-            OrthogonalProductBra(*source_labels)
-        )
-        return TensorProduct(control, scrap)
-
-    def creation_op(
-        self,
-        momentum: Union[int, tuple[int, ...]],
-        spin: Optional[int] = None,
-        **quantum_numbers
-    ):
-        return Dagger(self.annihilation_op(momentum, spin, **quantum_numbers))
-
-    def projection_op(
-        self,
-        state: int
-    ):
-        return TensorProduct(Control(state, state), IdentityProduct(self.size - 1))
 
 
 class Momentum(Register):

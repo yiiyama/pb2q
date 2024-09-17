@@ -1,11 +1,11 @@
 """Particle-level operator representations as sympy objects."""
-from sympy import Expr
+from sympy import Expr, S
 from sympy.physics.quantum import (BraBase, KetBase, Operator, OrthogonalBra, OrthogonalKet,
                                    OuterProduct)
 from sympy.printing.pretty.stringpict import prettyForm
 
 from ..momentum import Momentum
-from ..states import ParticleState
+from ..states import NullBra, ParticleBra, ParticleState
 
 
 class Control(OuterProduct):
@@ -48,6 +48,46 @@ class Control(OuterProduct):
             self.args[0].args[0],
             self.args[1].args[0]
         )
+    
+
+class PresenceProjection(Operator):
+    is_hermitian = True
+    is_unitary = False
+
+    def __new__(cls):
+        return super().__new__(cls)
+    
+    def _apply_operator_NullKet(self, ket, **options):
+        return S.Zero
+    
+    def _apply_operator_ParticleKet(self, ket, **options):
+        return ket
+    
+    def _apply_from_right_to(self, bra, **options):
+        if isinstance(bra, NullBra):
+            return S.Zero
+        if isinstance(bra, ParticleBra):
+            return bra
+
+
+class AbsenceProjection(Operator):
+    is_hermitian = True
+    is_unitary = False
+
+    def __new__(cls):
+        return super().__new__(cls)
+
+    def _apply_operator_NullKet(self, ket, **options):
+        return ket
+    
+    def _apply_operator_ParticleKet(self, ket, **options):
+        return S.Zero
+    
+    def _apply_from_right_to(self, bra, **options):
+        if isinstance(bra, NullBra):
+            return bra
+        if isinstance(bra, ParticleBra):
+            return S.Zero
 
 
 class ParticleEnergy(Operator):

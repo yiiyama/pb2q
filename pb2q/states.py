@@ -1,4 +1,4 @@
-# pylint: disable=no-member, unused-argument, invalid-name
+# pylint: disable=no-member, unused-argument, invalid-name, too-few-public-methods
 """State representations as sympy objects."""
 
 from collections.abc import Sequence
