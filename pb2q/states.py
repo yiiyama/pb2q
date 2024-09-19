@@ -3,7 +3,7 @@
 
 from collections.abc import Sequence
 from numbers import Integral
-from sympy import Add, Expr, Mul, S, sympify
+from sympy import Add, Mul, S, sympify
 from sympy.core.containers import Tuple
 from sympy.physics.quantum import (BraBase, KetBase, OrthogonalBra, OrthogonalKet, StateBase,
                                    TensorProduct)
@@ -134,8 +134,8 @@ def as_field_state(expr: Add):
 class ParticleState(StateBase, TensorProduct):
     """TensorProduct of a momentum state and a quantum number product state."""
     def __new__(cls, *args):
-        if len(args) == 1 and args[0] is None:
-            return cls.null_state_class()()
+        if not args or (len(args) == 1 and args[0] is None):
+            return QExpr.__new__(cls, None)
 
         args = sympify(args)
         if len(args) == 1 and isinstance(args[0], TensorProduct):
@@ -155,16 +155,29 @@ class ParticleState(StateBase, TensorProduct):
 
         raise ValueError(f'Invalid constructor arguments for ParticleState {args}')
 
+    @classmethod
+    def default_args(cls):
+        return None
+
     def _print_contents(self, printer, *args):
+        if self.args[0] is None:
+            return '_O_'
         return ';'.join(arg._print_contents(printer, *args) for arg in self.args)
 
     def _print_contents_pretty(self, printer, *args):
+        if self.args[0] is None:
+            if printer._use_unicode:
+                return prettyForm('\N{GREEK CAPITAL LETTER OMEGA}')
+            return prettyForm('_O_')
+
         pform = self.args[0]._print_contents_pretty(printer, *args)
         pform = prettyForm(*pform.right(','))
         pform = prettyForm(*pform.right(self.args[1]._print_contents_pretty(printer, *args)))
         return pform
 
     def _print_contents_latex(self, printer, *args):
+        if self.args[0] is None:
+            return r'\Omega'
         return '; '.join(arg._print_contents_latex(printer, *args) for arg in self.args)
 
     def _sympystr(self, printer, *args):
@@ -184,10 +197,6 @@ class ParticleKet(ParticleState, KetBase):
         return ParticleBra
 
     @classmethod
-    def null_state_class(cls):
-        return NullKet
-
-    @classmethod
     def momentum_state_class(cls):
         return MomentumKet
 
@@ -195,18 +204,21 @@ class ParticleKet(ParticleState, KetBase):
     def qnumber_state_class(cls):
         return QNumberKet
 
-    def _eval_innerproduct(self, bra, **hints):
-        # TODO: can use Hilbert space check if that's implemented
-        if isinstance(bra, NullBra):
+    def _eval_innerproduct_ParticleBra(self, bra, **hints):
+        if self.args[0] is None:
+            if bra.args[0] is None:
+                return S.One
             return S.Zero
 
-        if isinstance(bra, ParticleBra):
-            for bra_arg, arg in zip(bra.args, self.args):
-                compres = arg._eval_innerproduct(bra_arg, **hints)
-                if compres is None:
-                    return None
-                if compres == 0:
-                    return S.Zero
+        if bra.args[0] is None:
+            return S.Zero
+
+        for bra_arg, arg in zip(bra.args, self.args):
+            compres = arg._eval_innerproduct(bra_arg, **hints)
+            if compres is None:
+                return None
+            if compres == 0:
+                return S.Zero
 
         return S.One
 
@@ -224,43 +236,6 @@ class ParticleBra(ParticleState, BraBase):
     @classmethod
     def qnumber_state_class(cls):
         return QNumberBra
-
-
-class NullState(StateBase):
-    """Representation of unoccupied state."""
-    def __new__(cls):
-        return Expr.__new__(cls)
-
-    def _print_contents(self, printer, *args):
-        return '_O_'
-
-    def _print_contents_pretty(self, printer, *args):
-        if printer._use_unicode:
-            return prettyForm('\N{GREEK CAPITAL LETTER OMEGA}')
-        return prettyForm('_O_')
-
-    def _print_contents_latex(self, printer, *args):
-        return r'\Omega'
-
-
-class NullKet(NullState, ParticleKet):
-    """Ket representing the unoccupied state."""
-    @classmethod
-    def dual_class(cls):
-        return NullBra
-
-    def _eval_innerproduct(self, bra, **hints):
-        if isinstance(bra, NullBra):
-            return S.One
-        if isinstance(bra, ParticleBra):
-            return S.Zero
-
-
-class NullBra(NullState, OrthogonalBra):
-    """Bra representing the unoccupied state."""
-    @classmethod
-    def dual_class(cls):
-        return NullKet
 
 
 class MomentumState(ProductState):
