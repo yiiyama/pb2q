@@ -1,8 +1,8 @@
 # pylint: disable=invalid-name, unused-argument
 """Particle-level operator representations as sympy objects."""
 from sympy import Expr, S
-from sympy.physics.quantum import (BraBase, KetBase, Operator, OrthogonalBra, OrthogonalKet,
-                                   OuterProduct)
+from sympy.physics.quantum import (BraBase, KetBase, HermitianOperator, Operator, OrthogonalBra,
+                                   OrthogonalKet, OuterProduct)
 from sympy.printing.pretty.stringpict import prettyForm
 
 from ..momentum import Momentum
@@ -51,46 +51,49 @@ class Control(OuterProduct):
         )
 
 
-class PresenceProjection(Operator):
+class Projection(HermitianOperator):
     """Projector to the occupied state of a particle register."""
-    is_hermitian = True
     is_unitary = False
+
+    projection = None
 
     def __new__(cls):
         return super().__new__(cls)
 
+    @classmethod
+    def default_args(cls):
+        return ()
+
     def _apply_operator_ParticleKet(self, ket, **options):
         if ket.args[0] is S.EmptySet:
-            return S.Zero
-        return ket
+            return S.Zero if self.projection else ket
+        return ket if self.projection else S.Zero
 
     def _apply_from_right_to(self, bra, **options):
         if isinstance(bra, ParticleBra):
             if bra.args[0] is S.EmptySet:
-                return S.Zero
-            return bra
+                return S.Zero if self.projection else bra
+            return bra if self.projection else S.Zero
         return None
 
+    def _print_contents(self, printer, *args):
+        return f'P{self.projection}'
 
-class AbsenceProjection(Operator):
+    def _print_contents_pretty(self, printer, *args):
+        return prettyForm(f'P{self.projection}')
+
+    def _print_contents_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\mathbb{P}_{%d}' % self.projection
+
+
+class PresenceProjection(Projection):
+    """Projector to the occupied state of a particle register."""
+    projection = 1
+
+
+class AbsenceProjection(Projection):
     """Projector to the unoccupied state of a particle register."""
-    is_hermitian = True
-    is_unitary = False
-
-    def __new__(cls):
-        return super().__new__(cls)
-
-    def _apply_operator_ParticleKet(self, ket, **options):
-        if ket.args[0] is S.EmptySet:
-            return S.One
-        return S.Zero
-
-    def _apply_from_right_to(self, bra, **options):
-        if isinstance(bra, ParticleBra):
-            if bra.args[0] is S.EmptySet:
-                return S.One
-            return S.Zero
-        return None
+    projection = 0
 
 
 class ParticleEnergy(Operator):
