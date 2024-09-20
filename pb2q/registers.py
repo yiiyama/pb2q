@@ -5,10 +5,9 @@ from typing import Optional, Union
 from sympy import Expr, S
 from sympy.physics.quantum import Dagger, Ket, Operator, OuterProduct
 from .field import FieldDefinition
-from .momentum import MomentumKet
 from .operators import (PresenceProjection, AbsenceProjection, FieldOperator, StepAntisymmetrizer,
                         StepSymmetrizer)
-from .states import FieldKet, NullKet, ParticleKet, QNumberKet, UniverseKet
+from .states import FieldKet, MomentumKet, ParticleKet, QNumberKet, UniverseKet
 
 
 class RegisterBase(ABC):
@@ -54,7 +53,7 @@ class Universe(CompoundRegister):
     ):
         super().__init__('Universe')
         self.spatial_dimension = spatial_dimension
-        self.fields = {f.name: f if isinstance(f, Field) else Field(f) for f in fields}
+        self.fields = {f.name: f if isinstance(f, Field) else Field(f, self) for f in fields}
 
     @property
     def size(self) -> int:
@@ -113,7 +112,7 @@ class Field(CompoundRegister):
             args = [AbsenceProjection() for _ in range(num_unoccupied)]
             args.append(
                 OuterProduct(self.particle.null_state(),
-                             self.particle.state(momentum, spin, **quantum_numbers))
+                             self.particle.state(momentum, spin, **quantum_numbers).dual)
             )
             args.extend(PresenceProjection() for _ in range(ipart))
             annihilator = FieldOperator(*args)
@@ -161,21 +160,22 @@ class Particle(CompoundRegister):
     ) -> Expr:
         if isinstance(momentum, int):
             momentum = (momentum,)
-        qnumber = ()
+
+        try:
+            qnumber = tuple(quantum_numbers[name] for name in self._field.quantum_numbers)
+        except KeyError as exc:
+            raise ValueError('Quantum number missing') from exc
+
         if self._field.spin.spin != 0:
             if (spin is None or abs(spin) > self._field.spin.spin
                     or spin % 2 != self._field.spin.spin % 2):
                 raise ValueError(f'Invalid spin value {spin}')
-            qnumber = (spin,)
-        try:
-            qnumber += tuple(quantum_numbers[name] for name in self._field.quantum_numbers)
-        except KeyError as exc:
-            raise ValueError('Quantum number missing') from exc
+            qnumber = (spin,) + qnumber
 
         return ParticleKet(momentum, qnumber)
 
     def null_state(self) -> Expr:
-        return NullKet()
+        return ParticleKet()
 
     def null_state_args(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
         momentum = self._field.momentum.null_state_args()

@@ -60,13 +60,13 @@ class PresenceProjection(Operator):
         return super().__new__(cls)
 
     def _apply_operator_ParticleKet(self, ket, **options):
-        if ket.args[0] is None:
+        if ket.args[0] is S.EmptySet:
             return S.Zero
         return ket
 
     def _apply_from_right_to(self, bra, **options):
         if isinstance(bra, ParticleBra):
-            if bra.args[0] is None:
+            if bra.args[0] is S.EmptySet:
                 return S.Zero
             return bra
         return None
@@ -81,13 +81,13 @@ class AbsenceProjection(Operator):
         return super().__new__(cls)
 
     def _apply_operator_ParticleKet(self, ket, **options):
-        if ket.args[0] is None:
+        if ket.args[0] is S.EmptySet:
             return S.One
         return S.Zero
 
     def _apply_from_right_to(self, bra, **options):
         if isinstance(bra, ParticleBra):
-            if bra.args[0] is None:
+            if bra.args[0] is S.EmptySet:
                 return S.One
             return S.Zero
         return None
