@@ -1,11 +1,11 @@
 # pylint: disable=invalid-name
 """States that are also TensorProducts of component system states."""
 from sympy import S, sympify
-from sympy.physics.quantum import BraBase, KetBase, StateBase, TensorProduct
+from sympy.physics.quantum import BraBase, KetBase, State, StateBase, TensorProduct
 from sympy.physics.quantum.qexpr import QExpr
 
 
-class ProductState(StateBase, TensorProduct):
+class ProductState(State, TensorProduct):
     """General abstract quantum product state."""
     _op_priority = 20
 

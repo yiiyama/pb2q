@@ -3,6 +3,7 @@
 from .field import FieldOperator, apply_field_op
 from .particle import Control, PresenceProjection, AbsenceProjection
 from .symm import ParticleSwap, StepAntisymmetrizer, StepSymmetrizer
+from .universe import UniverseOperator
 
 __all__ = [
     'FieldOperator',
@@ -12,5 +13,6 @@ __all__ = [
     'AbsenceProjection',
     'ParticleSwap',
     'StepAntisymmetrizer',
-    'StepSymmetrizer'
+    'StepSymmetrizer',
+    'UniverseOperator'
 ]

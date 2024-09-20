@@ -2,11 +2,11 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Union
-from sympy import Expr, S
-from sympy.physics.quantum import Dagger, Ket, Operator, OuterProduct
+from sympy import Add, Expr
+from sympy.physics.quantum import Dagger, Ket, IdentityOperator, Operator, OuterProduct
 from .field import FieldDefinition
 from .operators import (PresenceProjection, AbsenceProjection, FieldOperator, StepAntisymmetrizer,
-                        StepSymmetrizer)
+                        StepSymmetrizer, UniverseOperator)
 from .states import FieldKet, MomentumKet, ParticleKet, QNumberKet, UniverseKet
 
 
@@ -62,6 +62,30 @@ class Universe(CompoundRegister):
     def null_state(self) -> Expr:
         return UniverseKet(*[field.null_state() for field in self.fields.values()])
 
+    def annihilation_op(
+        self,
+        field_name: str,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        ops = []
+        for name, field in self.fields.items():
+            if name == field_name:
+                ops.append(field.annihilation_op(momentum, spin, **quantum_numbers))
+            else:
+                ops.append(IdentityOperator())
+        return UniverseOperator(*ops)
+
+    def creation_op(
+        self,
+        field_name: str,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        return Dagger(self.annihilation_op(field_name, momentum, spin, **quantum_numbers))
+
 
 class Field(CompoundRegister):
     """Register for a single field species."""
@@ -106,7 +130,7 @@ class Field(CompoundRegister):
         spin: Optional[int] = None,
         **quantum_numbers
     ) -> Operator:
-        ann_op = S.Zero
+        ops = []
         for ipart in range(self.max_particles):
             num_unoccupied = self.max_particles - ipart - 1
             args = [AbsenceProjection() for _ in range(num_unoccupied)]
@@ -121,9 +145,9 @@ class Field(CompoundRegister):
                     annihilator *= StepSymmetrizer(ipart + 1)
                 else:
                     annihilator *= StepAntisymmetrizer(ipart + 1)
-            ann_op += annihilator
+            ops.append(annihilator)
 
-        return ann_op
+        return Add(*ops)
 
     def creation_op(
         self,
