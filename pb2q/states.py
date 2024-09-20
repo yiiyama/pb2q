@@ -44,7 +44,7 @@ class UniverseState(ProductState):
                                for arg in self.args)
 
     @property
-    def field(self):
+    def fields(self):
         return self.args
 
 
@@ -97,7 +97,7 @@ class FieldState(ProductState):
         return r'\otimes'.join(arg._latex(printer, *args) for arg in self.args)
 
     @property
-    def particle(self):
+    def particles(self):
         return self.args
 
 

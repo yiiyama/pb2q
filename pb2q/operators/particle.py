@@ -6,7 +6,7 @@ from sympy.physics.quantum import (BraBase, KetBase, Operator, OrthogonalBra, Or
 from sympy.printing.pretty.stringpict import prettyForm
 
 from ..momentum import Momentum
-from ..states import NullBra, ParticleBra, ParticleState
+from ..states import ParticleBra, ParticleState
 
 
 class Control(OuterProduct):
@@ -59,17 +59,17 @@ class PresenceProjection(Operator):
     def __new__(cls):
         return super().__new__(cls)
 
-    def _apply_operator_NullKet(self, ket, **options):
-        return S.Zero
-
     def _apply_operator_ParticleKet(self, ket, **options):
+        if ket.args[0] is None:
+            return S.Zero
         return ket
 
     def _apply_from_right_to(self, bra, **options):
-        if isinstance(bra, NullBra):
-            return S.Zero
         if isinstance(bra, ParticleBra):
+            if bra.args[0] is None:
+                return S.Zero
             return bra
+        return None
 
 
 class AbsenceProjection(Operator):
@@ -80,17 +80,17 @@ class AbsenceProjection(Operator):
     def __new__(cls):
         return super().__new__(cls)
 
-    def _apply_operator_NullKet(self, ket, **options):
-        return ket
-
     def _apply_operator_ParticleKet(self, ket, **options):
+        if ket.args[0] is None:
+            return S.One
         return S.Zero
 
     def _apply_from_right_to(self, bra, **options):
-        if isinstance(bra, NullBra):
-            return bra
         if isinstance(bra, ParticleBra):
+            if bra.args[0] is None:
+                return S.One
             return S.Zero
+        return None
 
 
 class ParticleEnergy(Operator):
