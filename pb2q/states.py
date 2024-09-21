@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from numbers import Integral
 from sympy import Add, Mul, S, sympify
 from sympy.core.containers import Tuple
-from sympy.physics.quantum import (BraBase, KetBase, OrthogonalBra, OrthogonalKet, StateBase,
+from sympy.physics.quantum import (BraBase, KetBase, OrthogonalBra, OrthogonalKet, State,
                                    TensorProduct)
 from sympy.physics.quantum.qexpr import QExpr
 from sympy.printing.pretty.stringpict import prettyForm
@@ -139,7 +139,7 @@ def as_field_state(expr: Add):
     return Add(*output_args)
 
 
-class ParticleState(StateBase, TensorProduct):
+class ParticleState(State, TensorProduct):
     """TensorProduct of a momentum state and a quantum number product state."""
     def __new__(cls, *args):
         if not args or (len(args) == 1 and args[0] is S.EmptySet):
