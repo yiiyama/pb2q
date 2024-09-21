@@ -1,25 +1,13 @@
 """Field-level operator representations as sympy objects."""
 
-from sympy import Add, Mul, S, sympify
-from sympy.physics.quantum import Dagger, Operator, TensorProduct, qapply, tensor_product_simp
-from sympy.physics.quantum.qexpr import QExpr
+from sympy import Add, Mul, S
+from sympy.physics.quantum import TensorProduct, qapply, tensor_product_simp
 from sympy.printing.pretty.stringpict import prettyForm
+from ..sympy import ProductOperator
 
 
-class FieldOperator(Operator, TensorProduct):
-    """TensorProduct of particle-level operators."""
-    def __new__(cls, *args):
-        c_part, new_args = cls.flatten(sympify(args))
-        if not all(isinstance(arg, (Operator, TensorProduct)) for arg in new_args):
-            raise ValueError(f'FieldOperator must be a product of Operators, got {args}')
-        fop = QExpr.__new__(cls, *new_args)
-        if not c_part:
-            return fop
-        return Mul(*c_part) * fop
-
-    def _eval_adjoint(self):
-        return FieldOperator(*[Dagger(arg) for arg in self.args])
-
+class FieldOperator(ProductOperator):
+    """Field-level operator."""
     def _sympystr(self, printer, *args):
         return 'x'.join(printer._print(arg, *args) for arg in self.args)
 

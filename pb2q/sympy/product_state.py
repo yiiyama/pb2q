@@ -11,10 +11,10 @@ class ProductState(State, TensorProduct):
 
     def __new__(cls, *args):
         args = sympify(args)
+        comp_cls = cls.component_class()
         # pylint: disable-next=isinstance-second-argument-not-valid-type
-        if cls.component_class and not all(isinstance(arg, cls.component_class()) for arg in args):
-            raise ValueError(f'Components of {cls.__name__} must be'
-                             f' {cls.component_class().__name__}')
+        if comp_cls and not all(isinstance(arg, comp_cls) for arg in args):
+            raise ValueError(f'Components of {cls.__name__} must be {comp_cls.__name__}')
 
         return QExpr.__new__(cls, *args)
 

@@ -1,42 +1,11 @@
 """Universe-level operator representations as sympy objects."""
 
-from sympy import Add, Mul
-from sympy.physics.quantum import Dagger, Operator, TensorProduct
-from sympy.physics.quantum.qexpr import QExpr
 from sympy.printing.pretty.stringpict import prettyForm
+from ..sympy import ProductOperator
 
 
-class UniverseOperator(Operator, TensorProduct):
-    """TensorProduct of particle-level operators."""
-    def __new__(cls, *args):
-        if not cls._check_field_ops(args):
-            raise ValueError(f'UniverseOperator must be a product of FieldOperators, got {args}')
-        return QExpr.__new__(cls, *args)
-
-    @staticmethod
-    def _check_field_ops(args):
-        for arg in args:
-            if isinstance(arg, Add):
-                print(arg, 'is Add')
-                for term in arg.args:
-                    if isinstance(term, Mul):
-                        print(term, 'is Mul')
-                        _, nc = term.args_cnc()
-                        if not all(isinstance(op, Operator) for op in nc):
-                            print('nc', nc, [type(op) for op in nc])
-                            return False
-                    elif not isinstance(term, Operator):
-                        print(term, 'is not instance')
-                        return False
-
-            elif not isinstance(arg, Operator):
-                print(arg, 'is not instance')
-                return False
-
-        return True
-
-    def _eval_adjoint(self):
-        return UniverseOperator(*[Dagger(arg) for arg in self.args])
+class UniverseOperator(ProductOperator):
+    """Universe-level operator."""
 
     def _sympystr(self, printer, *args):
         return 'x'.join(('{%s}' % printer._print(arg, *args)) for arg in self.args)
