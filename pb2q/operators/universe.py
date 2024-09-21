@@ -39,7 +39,7 @@ class UniverseOperator(Operator, TensorProduct):
         return UniverseOperator(*[Dagger(arg) for arg in self.args])
 
     def _sympystr(self, printer, *args):
-        return 'x'.join(('{%s}' % arg._sympystr(printer, *args)) for arg in self.args)
+        return 'x'.join(('{%s}' % printer._print(arg, *args)) for arg in self.args)
 
     def _pretty(self, printer, *args):
         length = len(self.args)
@@ -63,5 +63,5 @@ class UniverseOperator(Operator, TensorProduct):
         return pform
 
     def _latex(self, printer, *args):
-        return r'\otimes'.join(fr'\llbracket {arg._latex(printer, *args)} \rrbracket'
+        return r'\otimes'.join(fr'\llbracket {printer._print(arg, *args)} \rrbracket'
                                for arg in self.args)

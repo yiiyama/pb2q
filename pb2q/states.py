@@ -74,7 +74,7 @@ class UniverseBra(UniverseState, ProductBra):
 class FieldState(ProductState):
     """TensorProduct of ParticleStates."""
     def _sympystr(self, printer, *args):
-        return 'x'.join(('{%s}' % arg._sympystr(printer, *args)) for arg in self.args)
+        return 'x'.join(printer._print(arg, *args) for arg in self.args)
 
     def _pretty(self, printer, *args):
         length = len(self.args)
@@ -94,7 +94,7 @@ class FieldState(ProductState):
     def _latex(self, printer, *args):
         # return r'\otimes'.join((r'\left\{ %s \right\}' % arg._latex(printer, *args))
         #                        for arg in self.args)
-        return r'\otimes'.join(arg._latex(printer, *args) for arg in self.args)
+        return r'\otimes'.join(printer._print(arg, *args) for arg in self.args)
 
     @property
     def particles(self):
