@@ -2,10 +2,12 @@
 
 from .product_state import ProductState, ProductKet, ProductBra
 from .product_operator import ProductOperator
+from .apply_op import apply_op
 
 __all__ = [
     'ProductState',
     'ProductKet',
     'ProductBra',
-    'ProductOperator'
+    'ProductOperator',
+    'apply_op'
 ]

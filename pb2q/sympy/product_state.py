@@ -1,6 +1,6 @@
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name, isinstance-second-argument-not-valid-type
 """States that are also TensorProducts of component system states."""
-from sympy import S, sympify
+from sympy import Add, Mul, S, sympify
 from sympy.physics.quantum import BraBase, KetBase, State, StateBase, TensorProduct
 from sympy.physics.quantum.qexpr import QExpr
 
@@ -11,12 +11,37 @@ class ProductState(State, TensorProduct):
 
     def __new__(cls, *args):
         args = sympify(args)
-        comp_cls = cls.component_class()
-        # pylint: disable-next=isinstance-second-argument-not-valid-type
-        if comp_cls and not all(isinstance(arg, comp_cls) for arg in args):
-            raise ValueError(f'Components of {cls.__name__} must be {comp_cls.__name__}')
+        if any(arg == 0 for arg in args):
+            return S.Zero
+        if not cls._check_components(args):
+            raise ValueError(f'{cls.__name__} components must be {cls.component_class().__name__},'
+                             f' got {args}')
 
         return QExpr.__new__(cls, *args)
+
+    @classmethod
+    def _check_components(cls, args):
+        comp_cls = cls.component_class()
+        for arg in args:
+            if isinstance(arg, Add):
+                for term in arg.args:
+                    if isinstance(term, Mul):
+                        _, nc = term.args_cnc()
+                        if not all(isinstance(op, comp_cls) for op in nc):
+                            return False
+                    elif not isinstance(term, comp_cls):
+                        return False
+
+            elif isinstance(arg, Mul):
+                for fact in arg.args:
+                    _, nc = fact.args_cnc()
+                    if not all(isinstance(op, comp_cls) for op in nc):
+                        return False
+
+            elif not isinstance(arg, comp_cls):
+                return False
+
+        return True
 
     @classmethod
     def component_class(cls) -> type[StateBase]:

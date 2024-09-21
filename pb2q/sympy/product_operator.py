@@ -12,8 +12,8 @@ class ProductOperator(Operator, TensorProduct):
             raise ValueError(f'{cls.__name__} must be a product of Operators, got {args}')
         return QExpr.__new__(cls, *args)
 
-    @staticmethod
-    def _check_components(args):
+    @classmethod
+    def _check_components(cls, args):
         for arg in args:
             if isinstance(arg, Add):
                 for term in arg.args:
