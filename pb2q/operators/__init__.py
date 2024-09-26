@@ -2,7 +2,7 @@
 
 from .field import FieldOperator, apply_field_op
 from .particle import Control, PresenceProjection, AbsenceProjection
-from .symm import ParticleSwap, StepAntisymmetrizer, StepSymmetrizer
+from .symm import ParticleSwap, StepAntisymmetrizer, StepSymmetrizer, generate_perm
 from .universe import UniverseOperator
 
 __all__ = [
@@ -14,5 +14,6 @@ __all__ = [
     'ParticleSwap',
     'StepAntisymmetrizer',
     'StepSymmetrizer',
-    'UniverseOperator'
+    'UniverseOperator',
+    'generate_perm'
 ]

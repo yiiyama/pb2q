@@ -1,12 +1,13 @@
 """Registers."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import Optional, Union
-from sympy import Add, Expr
+from sympy import Add, Expr, S, factorial
 from sympy.physics.quantum import Dagger, Ket, IdentityOperator, Operator, OuterProduct
 from .field import FieldDefinition
 from .operators import (PresenceProjection, AbsenceProjection, FieldOperator, StepAntisymmetrizer,
-                        StepSymmetrizer, UniverseOperator)
+                        StepSymmetrizer, UniverseOperator, generate_perm)
 from .states import FieldKet, MomentumKet, ParticleKet, QNumberKet, UniverseKet
 
 
@@ -45,7 +46,7 @@ class CompoundRegister(RegisterBase):
 
 
 class Universe(CompoundRegister):
-    """Total physical register."""
+    """Register representing the entire universe."""
     def __init__(
         self,
         fields: list[Union['Field', FieldDefinition]],
@@ -115,14 +116,29 @@ class Field(CompoundRegister):
     def size(self) -> int:
         return self.particle.size * self.max_particles
 
-    def state(self, args: list[tuple]) -> Expr:
-        if (num_null := self.max_particles - len(args)) < 0:
+    def state(self, particle_args: Iterable[tuple]) -> Expr:
+        """Return a linear combination of FieldKets corresponding to the symmetrized tensorproducts
+        of the given particle states.
+
+        Args:
+            particle_args: List of arguments to ParticleKet.
+        """
+        if (np := len(particle_args)) > self.max_particles:
             raise ValueError('Too many particle state arguments')
-        return FieldKet(*([self.particle.null_state() for _ in range(num_null)]
-                          + [self.particle.state(*arg) for arg in args]))
+
+        result = S.Zero
+        for ip, perm in enumerate(generate_perm(range(np))):
+            particle_states = [self.particle.state(*particle_args[idx]) for idx in perm]
+            particle_states += [self.particle.null_state() for _ in range(self.max_particles - np)]
+            ket = FieldKet(*particle_states)
+            if self.spin.spin % 2 != 0 and ip % 2 == 1:
+                ket *= -1
+            result += ket
+
+        return result / factorial(np)
 
     def null_state(self) -> Expr:
-        return self.state([])
+        return FieldKet(*[self.particle.null_state() for _ in range(self.max_particles)])
 
     def annihilation_op(
         self,
@@ -130,21 +146,23 @@ class Field(CompoundRegister):
         spin: Optional[int] = None,
         **quantum_numbers
     ) -> Operator:
+        if self.spin.spin % 2 == 0:
+            symmetrizer = StepSymmetrizer
+        else:
+            symmetrizer = StepAntisymmetrizer
+
         ops = []
         for ipart in range(self.max_particles):
-            num_unoccupied = self.max_particles - ipart - 1
-            args = [AbsenceProjection() for _ in range(num_unoccupied)]
+            # Annihilation of ipart-th particle register
+            args = [PresenceProjection() for _ in range(ipart)]
             args.append(
                 OuterProduct(self.particle.null_state(),
                              self.particle.state(momentum, spin, **quantum_numbers).dual)
             )
-            args.extend(PresenceProjection() for _ in range(ipart))
+            args.extend(AbsenceProjection() for _ in range(ipart + 1, self.max_particles))
             annihilator = FieldOperator(*args)
             if ipart > 0:
-                if self.spin.spin % 2 == 0:
-                    annihilator *= StepSymmetrizer(ipart + 1)
-                else:
-                    annihilator *= StepAntisymmetrizer(ipart + 1)
+                annihilator *= symmetrizer(ipart + 1)
             ops.append(annihilator)
 
         return Add(*ops)

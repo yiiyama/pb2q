@@ -6,9 +6,8 @@ from ..sympy import ProductOperator
 
 class UniverseOperator(ProductOperator):
     """Universe-level operator."""
-
     def _sympystr(self, printer, *args):
-        return 'x'.join(('{%s}' % printer._print(arg, *args)) for arg in self.args)
+        return 'x'.join(('{%s}' % printer._print(arg, *args)) for arg in reversed(self.args))
 
     def _pretty(self, printer, *args):
         length = len(self.args)
@@ -22,15 +21,15 @@ class UniverseOperator(ProductOperator):
                 )
             else:
                 next_pform = prettyForm(*next_pform.parens(left='[', right=']'))
-            pform = prettyForm(*pform.right(next_pform))
+            pform = prettyForm(*pform.left(next_pform))
             if i != length - 1:
                 if printer._use_unicode:
-                    pform = prettyForm(*pform.right('\N{N-ARY CIRCLED TIMES OPERATOR}' + ' '))
+                    pform = prettyForm(*pform.left('\N{N-ARY CIRCLED TIMES OPERATOR}' + ' '))
                 else:
-                    pform = prettyForm(*pform.right('x' + ' '))
+                    pform = prettyForm(*pform.left('x' + ' '))
 
         return pform
 
     def _latex(self, printer, *args):
         return r'\otimes'.join(fr'\llbracket {printer._print(arg, *args)} \rrbracket'
-                               for arg in self.args)
+                               for arg in reversed(self.args))

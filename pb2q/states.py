@@ -16,7 +16,7 @@ from .sympy.product_state import ProductState, ProductKet, ProductBra
 class UniverseState(ProductState):
     """TensorProduct of FieldStates."""
     def _sympystr(self, printer, *args):
-        return 'x'.join(('{%s}' % arg._sympystr(printer, *args)) for arg in self.args)
+        return 'x'.join(('{%s}' % arg._sympystr(printer, *args)) for arg in reversed(self.args))
 
     def _pretty(self, printer, *args):
         length = len(self.args)
@@ -30,18 +30,18 @@ class UniverseState(ProductState):
                 )
             else:
                 next_pform = prettyForm(*next_pform.parens(left='[', right=']'))
-            pform = prettyForm(*pform.right(next_pform))
+            pform = prettyForm(*pform.left(next_pform))
             if i != length - 1:
                 if printer._use_unicode:
-                    pform = prettyForm(*pform.right('\N{N-ARY CIRCLED TIMES OPERATOR}' + ' '))
+                    pform = prettyForm(*pform.left('\N{N-ARY CIRCLED TIMES OPERATOR}' + ' '))
                 else:
-                    pform = prettyForm(*pform.right('x' + ' '))
+                    pform = prettyForm(*pform.left('x' + ' '))
 
         return pform
 
     def _latex(self, printer, *args):
         return r'\otimes'.join(fr'\llbracket {arg._latex(printer, *args)} \rrbracket'
-                               for arg in self.args)
+                               for arg in reversed(self.args))
 
     @property
     def fields(self):
@@ -74,7 +74,7 @@ class UniverseBra(UniverseState, ProductBra):
 class FieldState(ProductState):
     """TensorProduct of ParticleStates."""
     def _sympystr(self, printer, *args):
-        return 'x'.join(printer._print(arg, *args) for arg in self.args)
+        return 'x'.join(printer._print(arg, *args) for arg in reversed(self.args))
 
     def _pretty(self, printer, *args):
         length = len(self.args)
@@ -82,19 +82,19 @@ class FieldState(ProductState):
         for i in range(length):
             next_pform = printer._print(self.args[i], *args)
             # next_pform = prettyForm(*next_pform.parens(left='{', right='}'))
-            pform = prettyForm(*pform.right(next_pform))
+            pform = prettyForm(*pform.left(next_pform))
             if i != length - 1:
                 if printer._use_unicode:
-                    pform = prettyForm(*pform.right('\N{N-ARY CIRCLED TIMES OPERATOR}' + ' '))
+                    pform = prettyForm(*pform.left('\N{N-ARY CIRCLED TIMES OPERATOR}' + ' '))
                 else:
-                    pform = prettyForm(*pform.right('x' + ' '))
+                    pform = prettyForm(*pform.left('x' + ' '))
 
         return pform
 
     def _latex(self, printer, *args):
         # return r'\otimes'.join((r'\left\{ %s \right\}' % arg._latex(printer, *args))
         #                        for arg in self.args)
-        return r'\otimes'.join(printer._print(arg, *args) for arg in self.args)
+        return r'\otimes'.join(printer._print(arg, *args) for arg in reversed(self.args))
 
     @property
     def particles(self):
