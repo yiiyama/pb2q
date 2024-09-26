@@ -20,7 +20,6 @@ def apply_op(e, **options):
 
     See the docstring of qapply for details.
     """
-    print(f'apply_op({e})')
     dagger = options.get('dagger', False)
 
     if e == 0:
@@ -67,7 +66,6 @@ def apply_op(e, **options):
             if dagger:
                 return Dagger(apply_op_Mul(Dagger(e), **options))
             break
-        print(f'e is Mul, result is {result}')
         e = result
 
     # In all other cases (State, Operator, Pow, Commutator, InnerProduct,
@@ -76,7 +74,6 @@ def apply_op(e, **options):
 
 
 def apply_op_Mul(e, **options):
-    print(f'apply_op_Mul({e})')
     ip_doit = options.get('ip_doit', True)
 
     args = list(e.args)
@@ -120,14 +117,13 @@ def apply_op_Mul(e, **options):
             and isinstance(rhs, TensorProduct)
             and all(isinstance(arg, (Operator, State, Mul, Pow)) or arg == 1 for arg in rhs.args)
             and len(lhs.args) == len(rhs.args)):
-        print(f'Found tensor product, lhs={lhs.args}, rhs={rhs.args}')
+
         results = [apply_op(Mul(*pair), **options) for pair in zip(lhs.args, rhs.args)]
-        try:
-            result = rhs.func(*results)
-        except ValueError as ex:
-            raise ValueError(f'lhs={lhs.args}, rhs={rhs.args}, res={results}') from ex
-        print(f'res={results}')
-        result = result.expand(tensorproduct=True)
+        if all(res.is_number for res in results):
+            result = Mul(*results)
+        else:
+            result = rhs.func(*results).expand(tensorproduct=True)
+
         return apply_op_Mul(e.func(*args), **options) * result
 
     # Now try to actually apply the operator and build an inner product.
