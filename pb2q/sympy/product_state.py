@@ -1,7 +1,8 @@
 # pylint: disable=invalid-name, isinstance-second-argument-not-valid-type
 """States that are also TensorProducts of component system states."""
 from sympy import Add, Mul, S, sympify
-from sympy.physics.quantum import BraBase, KetBase, State, StateBase, TensorProduct
+from sympy.physics.quantum import (BraBase, KetBase, Dagger, State, StateBase, TensorProduct,
+                                   OuterProduct)
 from sympy.physics.quantum.qexpr import QExpr
 
 
@@ -62,7 +63,6 @@ class ProductKet(ProductState, KetBase):
     def _eval_innerproduct(self, bra, **hints):
         # TODO: can use Hilbert space check if that's implemented
         if isinstance(bra, ProductBra):
-            print('bra is product')
             if len(bra.args) != len(self.args):
                 raise ValueError('Cannot multiply a product ket that has a different number of'
                                  ' components.')
@@ -78,9 +78,42 @@ class ProductKet(ProductState, KetBase):
 
         return super()._eval_innerproduct(bra)
 
+    def __mul__(self, other):
+        if isinstance(other, ProductBra):
+            return ProductOuterProduct(self, other)
+        return KetBase.__mul__(self, other)
+
 
 class ProductBra(ProductState, BraBase):
     """Product Bra in quantum mechanics."""
     @classmethod
     def dual_class(cls):
         return ProductKet
+
+
+class ProductOuterProduct(OuterProduct):
+    """OuterProduct of a ProductKet and a ProductBra"""
+    def __new__(cls, *args, **old_assumptions):
+        if not (len(args) == 2 and isinstance(args[0], ProductKet)
+                and isinstance(args[1], ProductBra)):
+            raise ValueError(f'Invalid argument for ProductOuterProduct {args}')
+        return super().__new__(cls, *args, **old_assumptions)
+
+    def _apply_operator(self, ket, **options):
+        if isinstance(ket, ProductKet):
+            ip = self.bra * ket
+            if options.get('ip_doit', True):
+                ip = ip.doit()
+            return ip * self.ket
+        return super()._apply_operator(ket, **options)
+
+    def _apply_from_right_to(self, bra, **options):  # pylint: disable=unused-argument
+        if isinstance(bra, ProductBra):
+            ip = bra * self.ket
+            if options.get('ip_doit', True):
+                ip = ip.doit()
+            return ip * self.bra
+        return None
+
+    def _eval_adjoint(self):
+        return self.func(Dagger(self.bra), Dagger(self.ket))

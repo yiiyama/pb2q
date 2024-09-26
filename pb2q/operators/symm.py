@@ -7,7 +7,6 @@ from sympy.physics.quantum import HermitianOperator, IdentityOperator, UnitaryOp
 from sympy.printing.pretty.stringpict import prettyForm
 
 from ..states import FieldState
-from ..sympy import ProductKet
 from .field import FieldOperator
 
 
@@ -66,7 +65,7 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
         particle_states = [state.args[permutation[i]] for i in range(np)] + list(state.args[np:])
         return state.func(*particle_states)
 
-    def _apply_operator(self, state: FieldState, **options) -> ProductKet:
+    def _apply_operator(self, state: FieldState, **options) -> FieldState:
         return self.order_particles(state, self.args)  # pylint: disable=no-value-for-parameter
 
 
@@ -111,7 +110,7 @@ class ParticleSwap(HermitianOperator, UnitaryOperator):
         particle_states[index2] = state.args[index1]
         return state.func(*particle_states)
 
-    def _apply_operator(self, state: FieldState, **options) -> ProductKet:
+    def _apply_operator(self, state: FieldState, **options) -> FieldState:
         return self.swap_particles(state, *self.args)  # pylint: disable=no-value-for-parameter
 
 

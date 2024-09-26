@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Optional, Union
 from sympy import Add, Expr, S, factorial
-from sympy.physics.quantum import Dagger, Ket, IdentityOperator, Operator, OuterProduct
+from sympy.physics.quantum import Dagger, Ket, IdentityOperator, Operator
 from .field import FieldDefinition
 from .operators import (PresenceProjection, AbsenceProjection, FieldOperator, StepAntisymmetrizer,
                         StepSymmetrizer, UniverseOperator, generate_perm)
@@ -156,8 +156,8 @@ class Field(CompoundRegister):
             # Annihilation of ipart-th particle register
             args = [PresenceProjection() for _ in range(ipart)]
             args.append(
-                OuterProduct(self.particle.null_state(),
-                             self.particle.state(momentum, spin, **quantum_numbers).dual)
+                self.particle.null_state()
+                * self.particle.state(momentum, spin, **quantum_numbers).dual
             )
             args.extend(AbsenceProjection() for _ in range(ipart + 1, self.max_particles))
             annihilator = FieldOperator(*args)
