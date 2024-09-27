@@ -5,8 +5,7 @@ from collections.abc import Sequence
 from numbers import Integral
 from sympy import Add, Mul, S, sympify
 from sympy.core.containers import Tuple
-from sympy.physics.quantum import (BraBase, KetBase, OrthogonalBra, OrthogonalKet, State,
-                                   TensorProduct)
+from sympy.physics.quantum import BraBase, KetBase, OrthogonalBra, OrthogonalKet, TensorProduct
 from sympy.physics.quantum.qexpr import QExpr
 from sympy.printing.pretty.stringpict import prettyForm
 
@@ -139,10 +138,10 @@ def as_field_state(expr: Add):
     return Add(*output_args)
 
 
-class ParticleState(State, TensorProduct):
+class ParticleState(ProductState):
     """TensorProduct of a momentum state and a quantum number product state."""
     def __new__(cls, *args):
-        if not args or (len(args) == 1 and args[0] is S.Zero):
+        if not args or (len(args) == 1 and args[0] == 0):
             return QExpr.__new__(cls, S.Zero)
 
         args = sympify(args)
@@ -167,22 +166,13 @@ class ParticleState(State, TensorProduct):
     def default_args(cls):
         return None
 
-    @property
-    def dual(self):
-        """Return the dual state of this one."""
-        if self.args[0] is S.Zero:
-            dual_args = self.args
-        else:
-            dual_args = tuple(arg.dual for arg in self.args)
-        return self.dual_class()._new_rawargs(self.hilbert_space, *dual_args)
-
     def _print_contents(self, printer, *args):
-        if self.args[0] is S.Zero:
+        if self.is_null_state:
             return '_O_'
         return ':'.join(arg._print_contents(printer, *args) for arg in self.args)
 
     def _print_contents_pretty(self, printer, *args):
-        if self.args[0] is S.Zero:
+        if self.is_null_state:
             if printer._use_unicode:
                 return prettyForm('\N{GREEK CAPITAL LETTER OMEGA}')
             return prettyForm('_O_')
@@ -193,20 +183,28 @@ class ParticleState(State, TensorProduct):
         return pform
 
     def _print_contents_latex(self, printer, *args):
-        if self.args[0] is S.Zero:
+        if self.is_null_state:
             return r'\Omega'
         return ': '.join(arg._print_contents_latex(printer, *args) for arg in self.args)
 
     @property
     def momentum(self):
+        if self.is_null_state:
+            return None
         return self.args[0]
 
     @property
     def qnumber(self):
+        if self.is_null_state:
+            return None
         return self.args[1]
 
+    @property
+    def is_null_state(self):
+        return self.args[0] == 0
 
-class ParticleKet(ParticleState, KetBase):
+
+class ParticleKet(ParticleState, ProductKet):
     """ParticleState ket."""
     @classmethod
     def dual_class(cls):
@@ -220,27 +218,21 @@ class ParticleKet(ParticleState, KetBase):
     def qnumber_state_class(cls):
         return QNumberKet
 
-    def _eval_innerproduct_ParticleBra(self, bra, **hints):
-        if self.args[0] is S.Zero:
-            if bra.args[0] is S.Zero:
-                return S.One
-            return S.Zero
-
-        if bra.args[0] is S.Zero:
-            return S.Zero
-
-        for bra_arg, arg in zip(bra.args, self.args):
-            compres = arg._eval_innerproduct(bra_arg, **hints)
-            if compres is None:
-                return None
-            if compres == 0:
+    def _eval_innerproduct(self, bra, **hints):
+        if isinstance(bra, ParticleBra):
+            if self.is_null_state:
+                if bra.is_null_state:
+                    return S.One
                 return S.Zero
 
-        return S.One
+            if bra.is_null_state:
+                return S.Zero
+
+        return super()._eval_innerproduct(bra, **hints)
 
     def __mul__(self, other):
         # pylint: disable-next=import-outside-toplevel
-        from .operators.particle import ParticleOuterProduct
+        from pb2q.operators import ParticleOuterProduct
         if isinstance(other, ParticleBra):
             return ParticleOuterProduct(self, other)
         return KetBase.__mul__(self, other)

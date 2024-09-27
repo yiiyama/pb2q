@@ -65,12 +65,12 @@ class Projection(HermitianOperator):
         return ()
 
     def _apply_operator_ParticleKet(self, ket, **options):
-        if ket.args[0] is S.Zero:
+        if ket.is_null_state:
             return S.Zero if self.projection else ket
         return ket if self.projection else S.Zero
 
     def _apply_operator_ParticleOuterProduct(self, other, **options):
-        if other.ket.args[0] is S.Zero:
+        if other.ket.is_null_state:
             return S.Zero if self.projection else other
         return other if self.projection else S.Zero
 
@@ -82,7 +82,7 @@ class Projection(HermitianOperator):
         else:
             return None
 
-        if bra.args[0] is S.Zero:
+        if bra.is_null_state:
             return S.Zero if self.projection else other
         return other if self.projection else S.Zero
 
@@ -125,20 +125,44 @@ class ParticleOuterProduct(OuterProduct):
             raise ValueError(f'Invalid argument for ProductOuterProduct {args}')
         return super().__new__(cls, *args, **old_assumptions)
 
-    def _apply_operator(self, ket, **options):
-        if isinstance(ket, ParticleKet):
-            ip = self.bra * ket
-            if options.get('ip_doit', True):
-                ip = ip.doit()
-            return ip * self.ket
-        return super()._apply_operator(ket, **options)
+    def _apply_operator_ParticleKet(self, ket, **options):
+        ip = self.bra * ket
+        if options.get('ip_doit', True):
+            ip = ip.doit()
+        return ip * self.ket
 
-    def _apply_from_right_to(self, bra, **options):
-        if isinstance(bra, ParticleBra):
-            ip = bra * self.ket
-            if options.get('ip_doit', True):
+    def _apply_operator_PresenceProjection(self, other, **options):
+        if self.bra.is_null_state:
+            return S.Zero
+        return self
+
+    def _apply_operator_AbsenceProjection(self, other, **options):
+        if self.bra.is_null_state:
+            return self
+        return S.Zero
+
+    def _apply_from_right_to(self, other, **options):
+        ip_doit = options.get('ip_doit', True)
+
+        if isinstance(other, ParticleBra):
+            ip = other * self.ket
+            if ip_doit:
                 ip = ip.doit()
             return ip * self.bra
+        if isinstance(other, ParticleOuterProduct):
+            ip = other.bra * self.ket
+            if ip_doit:
+                ip = ip.doit()
+            return ip * (other.ket * self.bra)
+        if isinstance(other, PresenceProjection):
+            if self.ket.is_null_state:
+                return S.Zero
+            return self
+        if isinstance(other, AbsenceProjection):
+            if self.ket.is_null_state:
+                return self
+            return S.Zero
+
         return None
 
     def _eval_adjoint(self):
