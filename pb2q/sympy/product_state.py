@@ -22,7 +22,9 @@ class ProductState(State, TensorProduct):
 
     @classmethod
     def _check_components(cls, args):
-        comp_cls = cls.component_class()
+        if (comp_cls := cls.component_class()) is None:
+            return True
+
         for arg in args:
             if isinstance(arg, Add):
                 for term in arg.args:
@@ -53,6 +55,36 @@ class ProductState(State, TensorProduct):
         """Return the dual state of this one."""
         return self.dual_class()._new_rawargs(self.hilbert_space, *[arg.dual for arg in self.args])
 
+    def _eval_rewrite(self, rule, args, **hints):
+        # Overriding TensorProduct._eval_rewrite which hardcodes TensorProduct construction
+        return self.func(*args).expand(tensorproduct=True)
+
+    def doit(self, **hints):
+        # Overriding TensorProduct.doit
+        return self.func(*[item.doit(**hints) for item in self.args])
+
+    def _eval_expand_tensorproduct(self, **hints):
+        # Overriding TensorProduct._eval_expand_tensorproduct
+        add_args = []
+        for iarg, arg in enumerate(self.args):
+            if isinstance(arg, Add):
+                for aa in arg.args:
+                    tp = self.func(*(self.args[:iarg] + (aa,) + self.args[iarg + 1:]))
+                    c_part, nc_part = tp.args_cnc()
+                    # Check for TensorProduct object: is the one object in nc_part, if any:
+                    # (Note: any other object type to be expanded must be added here)
+                    if len(nc_part) == 1 and isinstance(nc_part[0], TensorProduct):
+                        nc_part = (nc_part[0]._eval_expand_tensorproduct(), )
+                    add_args.append(Mul(*c_part) * Mul(*nc_part))
+                break
+
+        if add_args:
+            return Add(*add_args)
+        return self
+
+    # TensorProduct._eval_adjoint also hardcodes but _eval_adjoint of this class is inherited from
+    # StateBase
+
 
 class ProductKet(ProductState, KetBase):
     """Ket of a quantum product state."""
@@ -76,7 +108,7 @@ class ProductKet(ProductState, KetBase):
 
             return S.One
 
-        return super()._eval_innerproduct(bra)
+        return super()._eval_innerproduct(bra, **hints)
 
     def __mul__(self, other):
         if isinstance(other, ProductBra):
