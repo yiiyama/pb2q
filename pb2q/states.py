@@ -142,8 +142,8 @@ def as_field_state(expr: Add):
 class ParticleState(State, TensorProduct):
     """TensorProduct of a momentum state and a quantum number product state."""
     def __new__(cls, *args):
-        if not args or (len(args) == 1 and args[0] is S.EmptySet):
-            return QExpr.__new__(cls, S.EmptySet)
+        if not args or (len(args) == 1 and args[0] is S.Zero):
+            return QExpr.__new__(cls, S.Zero)
 
         args = sympify(args)
         if len(args) == 2:
@@ -170,19 +170,19 @@ class ParticleState(State, TensorProduct):
     @property
     def dual(self):
         """Return the dual state of this one."""
-        if self.args[0] is S.EmptySet:
+        if self.args[0] is S.Zero:
             dual_args = self.args
         else:
             dual_args = tuple(arg.dual for arg in self.args)
         return self.dual_class()._new_rawargs(self.hilbert_space, *dual_args)
 
     def _print_contents(self, printer, *args):
-        if self.args[0] is S.EmptySet:
+        if self.args[0] is S.Zero:
             return '_O_'
         return ':'.join(arg._print_contents(printer, *args) for arg in self.args)
 
     def _print_contents_pretty(self, printer, *args):
-        if self.args[0] is S.EmptySet:
+        if self.args[0] is S.Zero:
             if printer._use_unicode:
                 return prettyForm('\N{GREEK CAPITAL LETTER OMEGA}')
             return prettyForm('_O_')
@@ -193,7 +193,7 @@ class ParticleState(State, TensorProduct):
         return pform
 
     def _print_contents_latex(self, printer, *args):
-        if self.args[0] is S.EmptySet:
+        if self.args[0] is S.Zero:
             return r'\Omega'
         return ': '.join(arg._print_contents_latex(printer, *args) for arg in self.args)
 
@@ -221,12 +221,12 @@ class ParticleKet(ParticleState, KetBase):
         return QNumberKet
 
     def _eval_innerproduct_ParticleBra(self, bra, **hints):
-        if self.args[0] is S.EmptySet:
-            if bra.args[0] is S.EmptySet:
+        if self.args[0] is S.Zero:
+            if bra.args[0] is S.Zero:
                 return S.One
             return S.Zero
 
-        if bra.args[0] is S.EmptySet:
+        if bra.args[0] is S.Zero:
             return S.Zero
 
         for bra_arg, arg in zip(bra.args, self.args):
