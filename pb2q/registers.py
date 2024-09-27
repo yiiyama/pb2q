@@ -155,10 +155,7 @@ class Field(CompoundRegister):
         for ipart in range(self.max_particles):
             # Annihilation of ipart-th particle register
             args = [PresenceProjection() for _ in range(ipart)]
-            args.append(
-                self.particle.null_state()
-                * self.particle.state(momentum, spin, **quantum_numbers).dual
-            )
+            args.append(self.particle.annihilation_op(momentum, spin, **quantum_numbers))
             args.extend(AbsenceProjection() for _ in range(ipart + 1, self.max_particles))
             annihilator = FieldOperator(*args)
             if ipart > 0:
@@ -226,6 +223,22 @@ class Particle(CompoundRegister):
             qnumber += (0,)
         qnumber += (0,) * len(self._field.quantum_numbers)
         return momentum, qnumber
+
+    def annihilation_op(
+        self,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        return self.null_state() * self.state(momentum, spin, **quantum_numbers).dual
+
+    def creation_op(
+        self,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        return Dagger(self.annihilation_op(momentum, spin, **quantum_numbers))
 
 
 class Momentum(Register):
