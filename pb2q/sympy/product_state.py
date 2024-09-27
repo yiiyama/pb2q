@@ -53,7 +53,8 @@ class ProductState(State, TensorProduct):
     @property
     def dual(self):
         """Return the dual state of this one."""
-        return self.dual_class()._new_rawargs(self.hilbert_space, *[arg.dual for arg in self.args])
+        return self.dual_class()._new_rawargs(self.hilbert_space,
+                                              *[arg.adjoint() for arg in self.args])
 
     def _eval_rewrite(self, rule, args, **hints):
         # Overriding TensorProduct._eval_rewrite which hardcodes TensorProduct construction
