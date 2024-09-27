@@ -1,12 +1,12 @@
 # pylint: disable=invalid-name, unused-argument
 """Particle-level operator representations as sympy objects."""
 from sympy import Expr, S
-from sympy.physics.quantum import (BraBase, KetBase, HermitianOperator, Operator, OrthogonalBra,
-                                   OrthogonalKet, OuterProduct)
+from sympy.physics.quantum import (BraBase, Dagger, KetBase, HermitianOperator, Operator,
+                                   OrthogonalBra, OrthogonalKet, OuterProduct)
 from sympy.printing.pretty.stringpict import prettyForm
 
 from ..momentum import Momentum
-from ..states import ParticleBra, ParticleState, ParticleOuterProduct
+from ..states import ParticleBra, ParticleKet, ParticleState
 
 
 class Control(OuterProduct):
@@ -115,6 +115,34 @@ class AbsenceProjection(Projection):
 
     def _apply_operator_PresenceProjection(self, other, **options):
         return S.Zero
+
+
+class ParticleOuterProduct(OuterProduct):
+    """OuterProduct of a ParticleKet and a ParticleBra."""
+    def __new__(cls, *args, **old_assumptions):
+        if not (len(args) == 2 and isinstance(args[0], ParticleKet)
+                and isinstance(args[1], ParticleBra)):
+            raise ValueError(f'Invalid argument for ProductOuterProduct {args}')
+        return super().__new__(cls, *args, **old_assumptions)
+
+    def _apply_operator(self, ket, **options):
+        if isinstance(ket, ParticleKet):
+            ip = self.bra * ket
+            if options.get('ip_doit', True):
+                ip = ip.doit()
+            return ip * self.ket
+        return super()._apply_operator(ket, **options)
+
+    def _apply_from_right_to(self, bra, **options):
+        if isinstance(bra, ParticleBra):
+            ip = bra * self.ket
+            if options.get('ip_doit', True):
+                ip = ip.doit()
+            return ip * self.bra
+        return None
+
+    def _eval_adjoint(self):
+        return self.func(Dagger(self.bra), Dagger(self.ket))
 
 
 class ParticleEnergy(Operator):
