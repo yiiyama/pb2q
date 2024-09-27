@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from numbers import Integral
 from sympy import Add, Mul, S, sympify
 from sympy.core.containers import Tuple
-from sympy.physics.quantum import BraBase, KetBase, OrthogonalBra, OrthogonalKet, TensorProduct
+from sympy.physics.quantum import KetBase, OrthogonalBra, OrthogonalKet, TensorProduct
 from sympy.physics.quantum.qexpr import QExpr
 from sympy.printing.pretty.stringpict import prettyForm
 
@@ -238,7 +238,7 @@ class ParticleKet(ParticleState, ProductKet):
         return KetBase.__mul__(self, other)
 
 
-class ParticleBra(ParticleState, BraBase):
+class ParticleBra(ParticleState, ProductBra):
     """ParticleState bra."""
     @classmethod
     def dual_class(cls):
