@@ -65,12 +65,12 @@ class Projection(HermitianOperator):
         return ()
 
     def _apply_operator_ParticleKet(self, ket, **options):
-        if ket.args[0] is S.EmptySet:
+        if ket.args[0] is S.Zero:
             return S.Zero if self.projection else ket
         return ket if self.projection else S.Zero
 
     def _apply_operator_ParticleOuterProduct(self, other, **options):
-        if other.ket.args[0] is S.EmptySet:
+        if other.ket.args[0] is S.Zero:
             return S.Zero if self.projection else other
         return other if self.projection else S.Zero
 
@@ -82,7 +82,7 @@ class Projection(HermitianOperator):
         else:
             return None
 
-        if bra.args[0] is S.EmptySet:
+        if bra.args[0] is S.Zero:
             return S.Zero if self.projection else other
         return other if self.projection else S.Zero
 
