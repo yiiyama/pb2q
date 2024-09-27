@@ -24,7 +24,10 @@ def apply_op(e, **options):
 
     See the docstring of qapply for details.
     """
-    LOG.debug('apply_op(%s)', e)
+    rec_depth = options.get('rec_depth', 0)
+    options['rec_depth'] = rec_depth + 1
+
+    LOG.debug('%d: apply_op(%s)', rec_depth, e)
     dagger = options.get('dagger', False)
 
     if e == 0:
@@ -45,10 +48,13 @@ def apply_op(e, **options):
     # We have an Add(a, b, c, ...) and compute
     # Add(qapply(a), qapply(b), ...)
     if isinstance(e, Add):
-        result = 0
+        LOG.debug('%d: %s is Add', rec_depth, e)
+        terms = []
         for arg in e.args:
-            result += apply_op(arg, **options)
-        return result.expand()
+            term = apply_op(arg, **options)
+            LOG.debug('%d: Got term %s', rec_depth, term)
+            terms.append(term)
+        return Add(*terms).expand()
 
     # For a raw TensorProduct, call qapply on its args.
     if isinstance(e, TensorProduct):
@@ -63,16 +69,16 @@ def apply_op(e, **options):
         c_part, nc_part = e.args_cnc()
         c_mul = Mul(*c_part)
         nc_mul = Mul(*nc_part)
-        LOG.debug('%s is Mul, nc_mul=%s', e, nc_mul)
+        LOG.debug('%d: %s is Mul, nc_mul=%s', rec_depth, e, nc_mul)
         if isinstance(nc_mul, Mul):
-            result = c_mul * apply_op_Mul(nc_mul, **options)
+            result = c_mul * apply_op_Mul(nc_mul, **dict(options))
         else:
             result = c_mul * apply_op(nc_mul, **options)
         if result == e:
             if dagger:
-                return Dagger(apply_op_Mul(Dagger(e), **options))
+                return Dagger(apply_op_Mul(Dagger(e), **dict(options)))
             break
-        LOG.debug('Updating e to %s', result)
+        LOG.debug('%d: Updating e to %s', rec_depth, result)
         e = result
 
     # In all other cases (State, Operator, Pow, Commutator, InnerProduct,
@@ -81,7 +87,10 @@ def apply_op(e, **options):
 
 
 def apply_op_Mul(e, **options):
-    LOG.debug('apply_op_Mul(%s)', e)
+    rec_depth = options.get('rec_depth', 0)
+    rec_depth_mul = options.get('rec_depth_mul', 0)
+    options['rec_depth_mul'] = rec_depth_mul + 1
+    LOG.debug('%d-%d: apply_op_Mul(%s)', rec_depth, rec_depth_mul, e)
     ip_doit = options.get('ip_doit', True)
 
     args = list(e.args)
@@ -117,7 +126,7 @@ def apply_op_Mul(e, **options):
                 e.func(*(args + [comm.args[1], rhs])),
                 **options
             )
-        return apply_op(e.func(*args)*comm*rhs, **options)
+        return apply_op(e.func(*args) * comm * rhs, **options)
 
     # Apply tensor products of operators to states
     if (isinstance(lhs, TensorProduct)
@@ -125,16 +134,18 @@ def apply_op_Mul(e, **options):
             and isinstance(rhs, TensorProduct)
             and all(isinstance(arg, (Operator, State, Mul, Pow)) or arg == 1 for arg in rhs.args)
             and len(lhs.args) == len(rhs.args)):
-        LOG.debug('Found tensor product, lhs=%s, rhs=%s', lhs.args, rhs.args)
-        results = [apply_op(Mul(*pair), **options) for pair in zip(lhs.args, rhs.args)]
-
-        if any(res == 0 for res in results):
-            LOG.debug('Null product of %s', results)
-            return S.Zero
+        LOG.debug('%d-%d: Found tensor product, lhs=%s, rhs=%s', rec_depth, rec_depth_mul, lhs.args,
+                  rhs.args)
+        results = []
+        for lhs_arg, rhs_arg in zip(lhs.args, rhs.args):
+            res = apply_op(Mul(lhs_arg, rhs_arg), **options)
+            if res == 0:
+                LOG.debug('%d-%d: Null product of %s', rec_depth, rec_depth_mul, results)
+                return S.Zero
+            results.append(res)
 
         if all(isinstance(res, Number) for res in results):
             result = Mul(*results)
-            LOG.debug('Numeric product %s', result)
         else:
             tps = TensorProduct(*results).expand(tensorproduct=True)
             if isinstance(tps, Add):
@@ -144,27 +155,30 @@ def apply_op_Mul(e, **options):
                     result += Mul(*c_part) * rhs.func(*nc_part)
             else:
                 result = rhs.func(*results)
-            LOG.debug('TensorProduct %s', result)
+        LOG.debug('%d-%d: Factoring out TP result %s from remaining %s', rec_depth, rec_depth_mul,
+                  result, args)
 
-        return apply_op_Mul(e.func(*args), **options) * result
+        return apply_op(e.func(*args) * result, **options)
 
     # Now try to actually apply the operator and build an inner product.
     try:
         result = lhs._apply_operator(rhs, **options)
-        LOG.debug('Applied %s to %s -> %s', lhs, rhs, result)
+        LOG.debug('%d-%d: Applied %s to %s -> %s', rec_depth, rec_depth_mul, lhs, rhs, result)
     except (NotImplementedError, AttributeError):
         try:
             result = rhs._apply_from_right_to(lhs, **options)
-            LOG.debug('Right-applied %s to %s -> %s', rhs, lhs, result)
+            LOG.debug('%d-%d: Right-applied %s to %s -> %s', rec_depth, rec_depth_mul, rhs, lhs,
+                      result)
         except (NotImplementedError, AttributeError):
             if isinstance(lhs, BraBase) and isinstance(rhs, KetBase):
                 result = InnerProduct(lhs, rhs)
                 if ip_doit:
                     result = result.doit()
-                LOG.debug('Innerproduct(%s, %s) = %s', lhs, rhs, result)
+                LOG.debug('%d-%d: Innerproduct(%s, %s) = %s', rec_depth, rec_depth_mul, lhs, rhs,
+                          result)
             else:
                 result = None
-                LOG.debug('No action between %s and %s', lhs, rhs)
+                LOG.debug('%d-%d: No action between %s and %s', rec_depth, rec_depth_mul, lhs, rhs)
 
     # TODO: I may need to expand before returning the final result.
     if result == 0:
@@ -172,12 +186,13 @@ def apply_op_Mul(e, **options):
     if result is None:
         if len(args) == 0:
             # We had two args to begin with so args=[].
-            LOG.debug('Returning the original expression %s', e)
+            LOG.debug('%d-%d: Returning the original expression %s', rec_depth, rec_depth_mul, e)
             return e
-        LOG.debug('Factoring out rhs %s', rhs)
+        LOG.debug('%d-%d: Factoring out rhs %s', rec_depth, rec_depth_mul, rhs)
         return apply_op_Mul(e.func(*(args + [lhs])), **options) * rhs
     if isinstance(result, InnerProduct):
         return result * apply_op_Mul(e.func(*args), **options)
     # result is a scalar times a Mul, Add or TensorProduct
-    LOG.debug('Factoring out result %s', result)
+    LOG.debug('%d-%d: Factoring out result %s from remaining %s', rec_depth, rec_depth_mul, result,
+              args)
     return apply_op(e.func(*args) * result, **options)
