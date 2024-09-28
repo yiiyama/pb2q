@@ -140,29 +140,42 @@ class Field(CompoundRegister):
     def null_state(self) -> Expr:
         return FieldKet(*[self.particle.null_state() for _ in range(self.max_particles)])
 
+    def annihilation_part_op(
+        self,
+        ipart: int,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        """Return the annihilation op of ipart-th particle register."""
+        args = [PresenceProjection() for _ in range(ipart)]
+        args.append(self.particle.annihilation_op(momentum, spin, **quantum_numbers))
+        args.extend(AbsenceProjection() for _ in range(ipart + 1, self.max_particles))
+        annihilator = FieldOperator(*args)
+        if ipart > 0:
+            if self.spin.spin % 2 == 0:
+                annihilator *= StepSymmetrizer(ipart + 1)
+            else:
+                annihilator *= StepAntisymmetrizer(ipart + 1)
+        return annihilator
+
+    def creation_part_op(
+        self,
+        ipart: int,
+        momentum: tuple[int, ...],
+        spin: Optional[int] = None,
+        **quantum_numbers
+    ) -> Operator:
+        return Dagger(self.annihilation_part_op(ipart, momentum, spin, **quantum_numbers))
+
     def annihilation_op(
         self,
         momentum: tuple[int, ...],
         spin: Optional[int] = None,
         **quantum_numbers
     ) -> Operator:
-        if self.spin.spin % 2 == 0:
-            symmetrizer = StepSymmetrizer
-        else:
-            symmetrizer = StepAntisymmetrizer
-
-        ops = []
-        for ipart in range(self.max_particles):
-            # Annihilation of ipart-th particle register
-            args = [PresenceProjection() for _ in range(ipart)]
-            args.append(self.particle.annihilation_op(momentum, spin, **quantum_numbers))
-            args.extend(AbsenceProjection() for _ in range(ipart + 1, self.max_particles))
-            annihilator = FieldOperator(*args)
-            if ipart > 0:
-                annihilator *= symmetrizer(ipart + 1)
-            ops.append(annihilator)
-
-        return Add(*ops)
+        return Add(*[self.annihilation_part_op(ipart, momentum, spin, **quantum_numbers)
+                     for ipart in range(self.max_particles)])
 
     def creation_op(
         self,
