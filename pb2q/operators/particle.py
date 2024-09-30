@@ -123,6 +123,9 @@ class ParticleOuterProduct(OuterProduct):
         if not (len(args) == 2 and isinstance(args[0], ParticleKet)
                 and isinstance(args[1], ParticleBra)):
             raise ValueError(f'Invalid argument for ProductOuterProduct {args}')
+        if args[0].is_null_state and args[1].is_null_state:
+            return AbsenceProjection()
+
         return super().__new__(cls, *args, **old_assumptions)
 
     def _apply_operator_ParticleKet(self, ket, **options):
@@ -194,5 +197,7 @@ class ParticleEnergy(Operator):
     def _print_contents_latex(self, printer, *args):
         return self._print_operator_name_latex(printer, *args)
 
-    def _apply_operator(self, state: ParticleState, **options) -> Expr:
-        return Momentum(state.args[1].args[0], mass=self.args[0]).energy() * state
+    def _apply_operator(self, rhs: Expr, **options) -> Expr:
+        if isinstance(rhs, ParticleState):
+            return Momentum(rhs.args[1].args[0], mass=self.args[0]).energy() * rhs
+        return super()._apply_operator(rhs, **options)
