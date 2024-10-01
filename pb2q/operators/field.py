@@ -16,7 +16,7 @@ class FieldOperator(ProductOperator):
         pform = printer._print('', *args)
         for i in range(length):
             next_pform = printer._print(self.args[i], *args)
-            next_pform = prettyForm(*next_pform.parens(left='{', right='}'))
+            # next_pform = prettyForm(*next_pform.parens(left='{', right='}'))
             pform = prettyForm(*pform.left(next_pform))
             if i != length - 1:
                 if printer._use_unicode:
