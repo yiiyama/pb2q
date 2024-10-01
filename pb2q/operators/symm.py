@@ -2,11 +2,11 @@
 """Field register swaps and symmetrizations."""
 from collections.abc import Sequence
 from typing import Any, Union
-from sympy import Add, Expr, Pow, factorial, sqrt, sympify
+from sympy import Add, Expr, factorial, sqrt, sympify
 from sympy.physics.quantum import HermitianOperator, IdentityOperator, UnitaryOperator
 from sympy.printing.pretty.stringpict import prettyForm
 
-from ..states import FieldState
+from ..states import FieldState, FieldKet
 from .field import FieldOperator
 
 
@@ -132,8 +132,7 @@ class ParticleSwap(HermitianOperator, UnitaryOperator):
 
     def _eval_power(self, exp):
         """Capturing return of unity and converting to I."""
-        result = super()._eval_power(exp)
-        if result == 1:
+        if (result := super()._eval_power(exp)) == 1:
             return IdentityOperator()
         return result
 
@@ -164,7 +163,7 @@ class StepSymmetrizerBase(HermitianOperator):
         )
 
     def _apply_operator(self, rhs: Expr, **options) -> Expr:
-        if isinstance(rhs, (FieldState, FieldOperator)):
+        if isinstance(rhs, (FieldKet, FieldOperator)):
             new_num = self.args[0]
             result_states = [rhs]
             for ipart in range(new_num - 1):
@@ -175,8 +174,9 @@ class StepSymmetrizerBase(HermitianOperator):
 
         return super()._apply_operator(rhs, **options)
 
-    def _eval_power(self, exp):
-        return Pow(sqrt(self.args[0]), exp - 1) * self
+    #  Only true in the right-filled subspace
+    # def _eval_power(self, exp):
+    #     return Pow(sqrt(self.args[0]), exp - 1) * self
 
     def _eval_rewrite(self, rule, args, **hints):
         new_num = self.args[0]  # pylint: disable=unbalanced-tuple-unpacking
