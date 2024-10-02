@@ -6,7 +6,7 @@ from sympy import Add, Expr, factorial, sqrt, sympify
 from sympy.physics.quantum import HermitianOperator, IdentityOperator, UnitaryOperator
 from sympy.printing.pretty.stringpict import prettyForm
 
-from ..states import FieldState, FieldKet
+from ..states import FieldState, FieldKet, FieldBra
 from .field import FieldOperator
 
 
@@ -65,14 +65,17 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
         particle_states = [state.args[permutation[i]] for i in range(np)] + list(state.args[np:])
         return state.func(*particle_states)
 
-    def _apply_operator(self, rhs: Expr, **options) -> Expr:
-        if isinstance(rhs, (FieldState, FieldOperator)):
-            return self.order_particles(rhs, self.args)  # pylint: disable=no-value-for-parameter
-        return super()._apply_operator(rhs, **options)
+    def _apply_operator_FieldKet(self, rhs: FieldKet, **options) -> Expr:
+        return self.order_particles(rhs, self.args)  # pylint: disable=no-value-for-parameter
 
     def _apply_operator_ParticlePermutation(self, rhs: 'ParticlePermutation', **options) -> Expr:
         new_indices = [rhs_arg[self_arg] for self_arg, rhs_arg in zip(self.args, rhs.args)]
         return ParticlePermutation(*new_indices)
+
+    def _apply_from_right_to(self, lhs: Expr, **options) -> Expr:
+        if isinstance(lhs, FieldBra):
+            return self.order_particles(lhs, self.args)
+        return None
 
 
 class ParticleSwap(HermitianOperator, UnitaryOperator):
@@ -116,10 +119,8 @@ class ParticleSwap(HermitianOperator, UnitaryOperator):
         particle_states[index2] = state.args[index1]
         return state.func(*particle_states)
 
-    def _apply_operator(self, rhs: Expr, **options) -> Expr:
-        if isinstance(rhs, (FieldState, FieldOperator)):
-            return self.swap_particles(rhs, *self.args)  # pylint: disable=no-value-for-parameter
-        return super()._apply_operator(rhs, **options)
+    def _apply_operator_FieldKet(self, rhs: FieldKet, **options) -> Expr:
+        return self.swap_particles(rhs, self.args[0], self.args[1])
 
     def _apply_operator_ParticleSwap(self, rhs: 'ParticleSwap', **options) -> Expr:
         if set(rhs.args) == set(self.args):
@@ -129,6 +130,11 @@ class ParticleSwap(HermitianOperator, UnitaryOperator):
         indices[rhs.args[0]], indices[rhs.args[1]] = indices[rhs.args[1]], indices[rhs.args[0]]
         indices[self.args[0]], indices[self.args[1]] = indices[self.args[1]], indices[self.args[0]]
         return ParticlePermutation(*indices)
+
+    def _apply_from_right_to(self, lhs: Expr, **options) -> Expr:
+        if isinstance(lhs, FieldBra):
+            return self.swap_particles(lhs, self.args[0], self.args[1])
+        return None
 
     def _eval_power(self, exp):
         """Capturing return of unity and converting to I."""
@@ -162,21 +168,14 @@ class StepSymmetrizerBase(HermitianOperator):
             self._print_operator_name_latex(printer, *args), self.args[0], self.args[0] - 1
         )
 
-    def _apply_operator(self, rhs: Expr, **options) -> Expr:
-        if isinstance(rhs, (FieldKet, FieldOperator)):
-            new_num = self.args[0]
-            result_states = [rhs]
-            for ipart in range(new_num - 1):
-                result_states.append(
-                    self._sign * ParticleSwap.swap_particles(rhs, new_num - 1, ipart)
-                )
-            return Add(*result_states) / sqrt(new_num)
-
-        return super()._apply_operator(rhs, **options)
-
-    #  Only true in the right-filled subspace
-    # def _eval_power(self, exp):
-    #     return Pow(sqrt(self.args[0]), exp - 1) * self
+    def _apply_operator_FieldKet(self, rhs: FieldKet, **options) -> Expr:
+        new_num = self.args[0]
+        result_states = [rhs]
+        for ipart in range(new_num - 1):
+            result_states.append(
+                self._sign * ParticleSwap.swap_particles(rhs, new_num - 1, ipart)
+            )
+        return Add(*result_states) / sqrt(new_num)
 
     def _eval_rewrite(self, rule, args, **hints):
         new_num = self.args[0]  # pylint: disable=unbalanced-tuple-unpacking
@@ -241,17 +240,14 @@ class SymmetrizerBase(HermitianOperator):
     def _print_contents_latex(self, printer, *args):
         return f'{self._print_operator_name_latex(printer, *args)}({self.args[0]})'
 
-    def _apply_operator(self, rhs: Expr, **options) -> Expr:
-        if isinstance(rhs, FieldState):
-            result_states = []
-            sign = 1
-            for perm in generate_perm(range(self.args[0])):
-                result_states.append(sign * ParticlePermutation.order_particles(rhs, perm))
-                sign *= self._sign
+    def _apply_operator_FieldKet(self, rhs: FieldKet, **options) -> Expr:
+        result_states = []
+        sign = 1
+        for perm in generate_perm(range(self.args[0])):
+            result_states.append(sign * ParticlePermutation.order_particles(rhs, perm))
+            sign *= self._sign
 
-            return Add(*result_states) / factorial(self.args[0])
-
-        return super()._apply_operator(rhs, **options)
+        return Add(*result_states) / factorial(self.args[0])
 
     def _eval_power(self, exp):
         if exp.is_integer and exp.is_positive:
