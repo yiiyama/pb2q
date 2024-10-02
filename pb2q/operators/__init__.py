@@ -1,9 +1,10 @@
 """Sympy representations of operators."""
 
-from .field import FieldOperator, project_physical
+from .field import FieldOperator
 from .particle import Control, PresenceProjection, AbsenceProjection, ParticleOuterProduct
 from .symm import ParticleSwap, StepAntisymmetrizer, StepSymmetrizer, generate_perm
 from .universe import UniverseOperator
+from .project_physical import project_physical
 
 __all__ = [
     'FieldOperator',
