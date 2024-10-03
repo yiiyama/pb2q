@@ -28,13 +28,13 @@ class FreeEvolution(UnitaryOperator):
 class ParticleFreeEvolution(FreeEvolution):
     """Particle level free evolution operator."""
     def _print_operator_name(self, printer, *args):
-        return 'uf'
+        return 'u11'
 
     def _print_operator_name_pretty(self, printer, *args):
-        return prettyForm('uf')
+        return prettyForm('u11')
 
     def _print_operator_name_latex(self, printer, *args):
-        return r'\mathfrak{u}_{f}'
+        return r'\mathfrak{u}_{11}'
 
     def _apply_operator_ParticleKet(self, rhs: ParticleKet, **options) -> Expr:
         return exp(-I * self.time * rhs.momentum.energy) * rhs
@@ -49,13 +49,13 @@ class ParticleFreeEvolution(FreeEvolution):
 class FieldFreeEvolution(FreeEvolution):
     """Field-level free evolution operator."""
     def _print_operator_name(self, printer, *args):
-        return 'Uf'
+        return 'U11'
 
     def _print_operator_name_pretty(self, printer, *args):
-        return prettyForm('Uf')
+        return prettyForm('U11')
 
     def _print_operator_name_latex(self, printer, *args):
-        return r'\mathcal{U}_{f}'
+        return r'\mathcal{U}_{11}'
 
     def _apply_operator_FieldKet(self, rhs: ParticleKet, **options) -> Expr:
         exponents = []
