@@ -16,10 +16,6 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
     Arguments of this operator must be unique contiguous integers >= 0. i'th particle of the
     returned state will correspond to the particle numbered permutation[i] of the input.
     """
-    @classmethod
-    def default_args(cls):
-        return ('PPERM',)
-
     def __new__(cls, *args, **kwargs):
         args = sympify(args)
         if not (all(arg.is_integer for arg in args) and set(args) == set(range(len(args)))):
@@ -28,6 +24,10 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
             return IdentityOperator()
 
         return super().__new__(cls, *args, **kwargs)
+
+    @classmethod
+    def default_args(cls):
+        return ('PPERM',)
 
     def _print_operator_name(self, printer, *args):
         return 'PPERM'
@@ -80,16 +80,16 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
 
 class ParticleSwap(HermitianOperator, UnitaryOperator):
     """Particle-level swap operator implemented as a sympy Operator."""
+    def __new__(cls, index1, index2, **kwargs):
+        args = sympify((index1, index2))
+        if not all(arg.is_integer for arg in args):
+            raise ValueError('ParticleSwap requires two integer arguments (index1, index2), got'
+                             f' {args}')
+        return super().__new__(cls, *args, **kwargs)
+
     @classmethod
     def default_args(cls):
         return ('PSWAP',)
-
-    def __new__(cls, *args, **kwargs):
-        args = sympify(args)
-        if not (len(args) == 2 and all(arg.is_integer for arg in args)):
-            raise ValueError('ParticleSwap requires two integer arguments (index1, index2),'
-                             f' got {args}')
-        return super().__new__(cls, *args, **kwargs)
 
     def _print_operator_name(self, printer, *args):
         return 'PSWAP'
