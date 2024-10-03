@@ -146,27 +146,27 @@ class ParticleOuterProduct(OuterProduct):
 
     def _apply_from_right_to(self, other, **options):
         ip_doit = options.get('ip_doit', True)
-
+        result = None
         if isinstance(other, ParticleBra):
             ip = other * self.ket
             if ip_doit:
                 ip = ip.doit()
-            return ip * self.bra
-        if isinstance(other, ParticleOuterProduct):
+            result = ip * self.bra
+        elif isinstance(other, ParticleOuterProduct):
             ip = other.bra * self.ket
             if ip_doit:
                 ip = ip.doit()
-            return ip * (other.ket * self.bra)
-        if isinstance(other, PresenceProjection):
+            result = ip * (other.ket * self.bra)
+        elif isinstance(other, PresenceProjection):
             if self.ket.is_null_state:
                 return S.Zero
-            return self
-        if isinstance(other, AbsenceProjection):
+            result = self
+        elif isinstance(other, AbsenceProjection):
             if self.ket.is_null_state:
                 return self
-            return S.Zero
+            result = S.Zero
 
-        return None
+        return result
 
     def _eval_adjoint(self):
         return self.func(Dagger(self.bra), Dagger(self.ket))
