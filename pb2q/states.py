@@ -3,7 +3,7 @@
 
 from collections.abc import Sequence
 from numbers import Integral
-from sympy import Add, Mul, S, sympify
+from sympy import Add, Function, Mul, S, sympify
 from sympy.core.containers import Tuple
 from sympy.physics.quantum import KetBase, OrthogonalBra, OrthogonalKet, TensorProduct
 from sympy.physics.quantum.qexpr import QExpr
@@ -326,6 +326,11 @@ class MomentumState(QNumberState):
     @property
     def z(self):
         return self.args[2]
+
+    @property
+    def energy(self):
+        # pylint: disable-next=not-callable
+        return Function('E')(sympify(tuple(p.args[0] for p in self.args)))
 
 
 class MomentumKet(MomentumState, ProductKet):
