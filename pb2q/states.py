@@ -315,6 +315,13 @@ class MomentumState(QNumberState):
     """Generic momentum state."""
     _label_separator = ','
 
+    def __getitem__(self, index):
+        return self.args[index].args[0]
+
+    @property
+    def num_dimensions(self):
+        return len(self.args)
+
     @property
     def x(self):
         return self.args[0]
