@@ -5,7 +5,7 @@ from sympy.physics.quantum import BraBase, KetBase, Dagger, State, OuterProduct
 from .product_qexpr import ProductQExpr
 
 
-class ProductState(State, ProductQExpr):
+class ProductState(ProductQExpr, State):
     """General abstract quantum product state."""
     _op_priority = 20
 
@@ -14,6 +14,9 @@ class ProductState(State, ProductQExpr):
         """Return the dual state of this one."""
         return self.dual_class()._new_rawargs(self.hilbert_space,
                                               *[arg.adjoint() for arg in self.args])
+
+    def _eval_adjoint(self):
+        return self.dual
 
 
 class ProductKet(ProductState, KetBase):

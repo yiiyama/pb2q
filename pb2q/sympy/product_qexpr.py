@@ -49,6 +49,10 @@ class ProductQExpr(QExpr, TensorProduct):
     def component_class(cls) -> type[QExpr]:
         return None
 
+    @classmethod
+    def default_args(cls):
+        return ()
+
     def _eval_adjoint(self):
         return self.func(*[Dagger(arg) for arg in self.args])
 
