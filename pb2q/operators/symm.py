@@ -247,7 +247,7 @@ class SymmetrizerBase(HermitianOperator):
             result_states.append(sign * ParticlePermutation.order_particles(rhs, perm))
             sign *= self._sign
 
-        return Add(*result_states) / factorial(self.args[0])
+        return Add(*result_states) / sqrt(factorial(self.args[0]))
 
     def _eval_power(self, exp):
         if exp.is_integer and exp.is_positive:
@@ -262,9 +262,37 @@ class SymmetrizerBase(HermitianOperator):
 
             ops = [(self._sign ** ip) * ParticlePermutation(perm)
                    for ip, perm in enumerate(generate_perm(range(num)))]
-            return Add(*ops) / factorial(num)
+            return Add(*ops) / sqrt(factorial(num))
 
         return None
+
+
+class Symmetrizer(SymmetrizerBase):
+    """Full symmetrizer."""
+    _sign = 1
+
+    def _print_operator_name(self, printer, *args):
+        return 'SS'
+
+    def _print_operator_name_pretty(self, printer, *args):
+        return prettyForm('SS')
+
+    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\bar{\mathcal{S}}'
+
+
+class Antisymmetrizer(SymmetrizerBase):
+    """Full antisymmetrizer."""
+    _sign = -1
+
+    def _print_operator_name(self, printer, *args):
+        return 'AA'
+
+    def _print_operator_name_pretty(self, printer, *args):
+        return prettyForm('AA')
+
+    def _print_operator_name_latex(self, printer, *args):  # pylint: disable=unused-argument
+        return r'\bar{\mathcal{A}}'
 
 
 def generate_perm(seq: Sequence, _k=None) -> list[tuple[Any]]:
