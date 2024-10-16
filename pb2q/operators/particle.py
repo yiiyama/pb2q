@@ -171,6 +171,11 @@ class ParticleOuterProduct(OuterProduct):
     def _eval_adjoint(self):
         return self.func(Dagger(self.bra), Dagger(self.ket))
 
+    def _eval_power(self, exp):
+        if exp.is_integer and exp.is_positive:
+            return (self.bra * self.ket).doit() * self
+        return super()._eval_power(exp)
+
 
 class ParticleEnergy(Operator):
     """Particle-level free Hamiltonian."""
