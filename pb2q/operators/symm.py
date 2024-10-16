@@ -251,7 +251,7 @@ class SymmetrizerBase(HermitianOperator):
 
     def _eval_power(self, exp):
         if exp.is_integer and exp.is_positive:
-            return self
+            return self * sqrt(self.args[0])
         return super()._eval_power(exp)
 
     def _eval_rewrite(self, rule, args, **hints):
