@@ -1,4 +1,4 @@
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name, too-many-return-statements, too-many-branches, too-many-statements
 """Reimplementation of qapply for ProductOperators."""
 import logging
 from sympy import Number
@@ -62,7 +62,7 @@ def apply_op(e, **options):
 
     # For a Pow, call qapply on its base.
     if isinstance(e, Pow):
-        return apply_op(e.base, **options) ** e.exp
+        return apply_op_Pow(e.base, e.exp, **dict(options))
 
     # We have a Mul where there might be actual operators to apply to kets.
     while isinstance(e, Mul):
@@ -87,6 +87,7 @@ def apply_op(e, **options):
 
 
 def apply_op_Mul(e, **options):
+    """Apply the second-from-last operator to the last object (operator or state)."""
     rec_depth = options.get('rec_depth', 0)
     rec_depth_mul = options.get('rec_depth_mul', 0)
     options['rec_depth_mul'] = rec_depth_mul + 1
@@ -196,3 +197,35 @@ def apply_op_Mul(e, **options):
     LOG.debug('%d-%d: Factoring out result %s from remaining %s', rec_depth, rec_depth_mul, result,
               args)
     return apply_op(e.func(*args) * result, **options)
+
+
+def apply_op_Pow(base, exp, **options):
+    """Evaluate the power of expression with special-case handling for tensor products."""
+    rec_depth = options.get('rec_depth', 0)
+
+    if (isinstance(base, TensorProduct)
+            and all(isinstance(arg, (Operator, Mul, Pow)) or arg == 1 for arg in base.args)):
+        results = []
+        for arg in base.args:
+            res = apply_op(arg ** exp, **options)
+            if res == 0:
+                LOG.debug('%d-Pow: Null product of %s', rec_depth, results)
+                return S.Zero
+            results.append(res)
+
+        if all(isinstance(res, Number) for res in results):
+            result = Mul(*results)
+        else:
+            tps = TensorProduct(*results).expand(tensorproduct=True)
+            if isinstance(tps, Add):
+                result = S.Zero
+                for term in tps.args:
+                    c_part, nc_part = term.args_cnc()
+                    result += Mul(*c_part) * base.func(*nc_part)
+            else:
+                result = base.func(*results)
+        LOG.debug('%d-Pow: Returning TP of power %s', rec_depth, result)
+
+        return result
+
+    return apply_op(base, **options) ** exp
