@@ -1,6 +1,7 @@
 # pylint: disable=invalid-name, too-many-return-statements, too-many-branches, too-many-statements
 """Reimplementation of qapply for ProductOperators."""
 import logging
+from multiprocessing import Pool
 from sympy import Number
 from sympy.core.add import Add
 from sympy.core.mul import Mul
@@ -24,8 +25,15 @@ def apply_op(e, **options):
 
     See the docstring of qapply for details.
     """
+    result = _do_apply_op(e, options)
+    LOG.debug('%d: return %s', options.get('rec_depth', 0), result)
+    return result
+
+
+def _do_apply_op(e, options):
     rec_depth = options.get('rec_depth', 0)
     options['rec_depth'] = rec_depth + 1
+    parallelize = options.get('parallelize', False)
 
     LOG.debug('%d: apply_op(%s)', rec_depth, e)
     dagger = options.get('dagger', False)
@@ -49,11 +57,16 @@ def apply_op(e, **options):
     # Add(qapply(a), qapply(b), ...)
     if isinstance(e, Add):
         LOG.debug('%d: %s is Add', rec_depth, e)
-        terms = []
-        for arg in e.args:
-            term = apply_op(arg, **options)
-            LOG.debug('%d: Got term %s', rec_depth, term)
-            terms.append(term)
+        if parallelize:
+            op = dict(options)
+            op['parallelize'] = False
+            with Pool() as pool:
+                terms = pool.starmap(_do_apply_op, [(arg, op) for arg in e.args])
+        else:
+            terms = []
+            for arg in e.args:
+                terms.append(apply_op(arg, **options))
+
         return Add(*terms).expand()
 
     # For a raw TensorProduct, call qapply on its args.
