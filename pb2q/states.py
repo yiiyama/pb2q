@@ -140,7 +140,7 @@ class SymmetricFieldStateBase(FieldState):
     __slots__ = ('right_filled',)
 
     def __new__(cls, *args, right_filled=True):
-        obj = super().__new__(cls, *args)
+        obj = super().__new__(cls, *tuple(sorted(args)))
         obj.right_filled = right_filled
         if right_filled and not all(arg.is_null_state for arg in args[obj.nocc:]):
             raise ValueError('Field state arguments are not right-filled')
@@ -329,6 +329,84 @@ class ParticleState(ProductState):
     def is_null_state(self):
         return self.args[0] == 0
 
+    def __lt__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        if self.is_null_state:
+            return False
+        if other.is_null_state:
+            return True
+        if self.momentum < other.momentum:
+            return True
+        if self.momentum > other.momentum:
+            return False
+        if self.qnumber < other.qnumber:
+            return True
+        return False
+
+    def __le__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        if other.is_null_state:
+            return True
+        if self.is_null_state:
+            return False
+        if self.momentum > other.momentum:
+            return False
+        if self.momentum < other.momentum:
+            return True
+        if self.qnumber > other.qnumber:
+            return False
+        return True
+
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        if self.is_null_state:
+            return other.is_null_state
+        if other.is_null_state:
+            return False
+        return self.momentum == other.momentum and self.qnumber == other.qnumber
+
+    def __ne__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        if self.is_null_state:
+            return not other.is_null_state
+        if other.is_null_state:
+            return True
+        return self.momentum != other.momentum or self.qnumber != other.qnumber
+
+    def __gt__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        if other.is_null_state:
+            return False
+        if self.is_null_state:
+            return True
+        if self.momentum > other.momentum:
+            return True
+        if self.momentum < other.momentum:
+            return False
+        if self.qnumber > other.qnumber:
+            return True
+        return False
+
+    def __ge__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        if self.is_null_state:
+            return True
+        if other.is_null_state:
+            return False
+        if self.momentum < other.momentum:
+            return False
+        if self.momentum > other.momentum:
+            return True
+        if self.qnumber < other.qnumber:
+            return False
+        return True
+
 
 class ParticleKet(ParticleState, ProductKet):
     """ParticleState ket."""
@@ -413,6 +491,58 @@ class QNumberState(ProductState):
     @property
     def component(self):
         return self.args
+
+    def __lt__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        for my_comp, others_comp in zip(self.args, other.args):
+            if my_comp.args < others_comp.args:
+                return True
+            if my_comp.args > others_comp.args:
+                return False
+        return False
+
+    def __le__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        for my_comp, others_comp in zip(self.args, other.args):
+            if my_comp.args < others_comp.args:
+                return True
+            if my_comp.args > others_comp.args:
+                return False
+        return True
+
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return all(my_comp.args == others_comp.args
+                   for my_comp, others_comp in zip(self.args, other.args))
+
+    def __ne__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return any(my_comp.args != others_comp.args
+                   for my_comp, others_comp in zip(self.args, other.args))
+
+    def __gt__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        for my_comp, others_comp in zip(self.args, other.args):
+            if my_comp.args > others_comp.args:
+                return True
+            if my_comp.args < others_comp.args:
+                return False
+        return False
+
+    def __ge__(self, other):
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        for my_comp, others_comp in zip(self.args, other.args):
+            if my_comp.args > others_comp.args:
+                return True
+            if my_comp.args < others_comp.args:
+                return False
+        return True
 
 
 class QNumberKet(QNumberState, ProductKet):
