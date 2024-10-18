@@ -1,15 +1,17 @@
 # pylint: disable=no-member, unused-argument, invalid-name, too-few-public-methods
 """State representations as sympy objects."""
 
+from collections import Counter
 from collections.abc import Sequence
 from numbers import Integral
-from sympy import Add, Function, Mul, S, sympify
+from sympy import Add, Function, Mul, S, factorial, sqrt, sympify
 from sympy.core.containers import Tuple
 from sympy.physics.quantum import KetBase, OrthogonalBra, OrthogonalKet, TensorProduct
 from sympy.physics.quantum.qexpr import QExpr
 from sympy.printing.pretty.stringpict import prettyForm
 
 from .sympy.product_state import ProductState, ProductKet, ProductBra
+from .utils import generate_perm
 
 
 class UniverseState(ProductState):
@@ -72,6 +74,17 @@ class UniverseBra(UniverseState, ProductBra):
 
 class FieldState(ProductState):
     """TensorProduct of ParticleStates."""
+    __slots__ = ('_n',)
+
+    def __new__(cls, *args):
+        obj = super().__new__(cls, *args)
+        obj._nocc = sum(1 if not arg.is_null_state else 0 for arg in args)
+        return obj
+
+    @property
+    def nocc(self):
+        return self._nocc
+
     def _sympystr(self, printer, *args):
         return 'x'.join(printer._print(arg, *args) for arg in reversed(self.args))
 
@@ -116,6 +129,122 @@ class FieldBra(FieldState, ProductBra):
     @classmethod
     def dual_class(cls):
         return FieldKet
+
+    @classmethod
+    def component_class(cls):
+        return ParticleBra
+
+
+class SymmetricFieldStateBase(FieldState):
+    """FieldState with implicit symmetrization."""
+    __slots__ = ('right_filled',)
+
+    def __new__(cls, *args, right_filled=True):
+        obj = super().__new__(cls, *args)
+        obj.right_filled = right_filled
+        if right_filled and not all(arg.is_null_state for arg in args[obj.nocc:]):
+            raise ValueError('Field state arguments are not right-filled')
+        return obj
+
+    def doit(self, **hints):
+        # pylint: disable-next=import-outside-toplevel
+        from .operators.symm import ParticlePermutation
+
+        npart = self.nocc if self.right_filled else len(self.args)
+        permutations = [perm + tuple(range(npart, len(self.args)))
+                        for perm in generate_perm(range(npart))]
+
+        norm = sqrt(factorial(npart))
+        for cnt in Counter(self.args[:npart]).values():
+            if cnt != 1:
+                norm /= sqrt(factorial(cnt))
+
+        terms = []
+        for ip, perm in enumerate(permutations):
+            if ip == 0:
+                terms.append(self.field_state(*self.args))
+            else:
+                terms.append(
+                    (self._sign ** ip) * ParticlePermutation.order_particles(terms[0], perm)
+                )
+
+        return (Add(*terms) / norm).expand()
+
+    def _sympystr(self, printer, *args):
+        return (f'{self.lbracket}{super()._sympystr(printer, *args)}{self.rbracket}'
+                + ('S' if self._sign == 1 else 'A'))
+
+    def _pretty(self, printer, *args):
+        pform = super()._pretty(printer, *args)
+        lbracket, rbracket = self._pretty_brackets(pform.height(), printer._use_unicode)
+        pform = prettyForm(*pform.parens(left=lbracket, right=rbracket))
+        return prettyForm(*pform.right('S' if self._sign == 1 else 'A'))
+
+    def _latex(self, printer, *args):
+        return '{{%s%s%s}_%s}' % (
+            self.lbracket_latex,
+            super()._latex(printer, *args),
+            self.rbracket_latex,
+            'S' if self._sign == 1 else 'A'
+        )
+
+
+class SymmetricFieldState(SymmetricFieldStateBase):
+    """Symmetric FieldState."""
+    _sign = 1
+
+
+class SymmetricFieldKet(SymmetricFieldState, ProductKet):
+    """Symmetric TensorProduct of ParticleKets."""
+    field_state = FieldKet
+
+    @classmethod
+    def dual_class(cls):
+        return SymmetricFieldBra
+
+    @classmethod
+    def component_class(cls):
+        return ParticleKet
+
+
+class SymmetricFieldBra(SymmetricFieldState, ProductBra):
+    """Symmetric TensorProduct of ParticleBras."""
+    field_state = FieldBra
+
+    @classmethod
+    def dual_class(cls):
+        return SymmetricFieldKet
+
+    @classmethod
+    def component_class(cls):
+        return ParticleBra
+
+
+class AntisymmetricFieldState(SymmetricFieldStateBase):
+    """Antisymmetric FieldState."""
+    _sign = -1
+
+
+class AntisymmetricFieldKet(AntisymmetricFieldState, ProductKet):
+    """Antisymmetric TensorProduct of ParticleKets."""
+    field_state = FieldKet
+
+    @classmethod
+    def dual_class(cls):
+        return AntisymmetricFieldBra
+
+    @classmethod
+    def component_class(cls):
+        return ParticleKet
+
+
+class AntisymmetricFieldBra(AntisymmetricFieldState, ProductBra):
+    """Antisymmetric TensorProduct of ParticleBras."""
+    field_state = FieldBra
+
+    @classmethod
+    def dual_class(cls):
+        return AntisymmetricFieldKet
 
     @classmethod
     def component_class(cls):
