@@ -1,14 +1,11 @@
 # pylint: disable=consider-using-f-string, invalid-name, unused-argument
 """Field register swaps and symmetrizations."""
-from collections.abc import Sequence
-from typing import Union
 from sympy import Add, Expr, factorial, sqrt, sympify
 from sympy.physics.quantum import HermitianOperator, IdentityOperator, UnitaryOperator
 from sympy.printing.pretty.stringpict import prettyForm
 
-from ..states import FieldState, FieldKet, FieldBra, AntisymmetricFieldKet, SymmetricFieldKet
-from ..utils import generate_perm
-from .field import FieldOperator
+from ..states import FieldKet, FieldBra, AntisymmetricFieldKet, SymmetricFieldKet
+from ..permutation import generate_perm, order_args, swap_args
 
 
 class ParticlePermutation(HermitianOperator, UnitaryOperator):
@@ -51,23 +48,8 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
             ','.join(f'{arg}' for arg in self.args)
         )
 
-    @staticmethod
-    def order_particles(
-        state: Union[FieldState, FieldOperator],
-        permutation: Sequence[int]
-    ) -> FieldState:
-        """Order particles in a FieldState or FieldOperator.
-
-        Args:
-            permutation: Sequence of integers specifying the permutation. i'th particle of the
-                returned state will correspond to the particle numbered permutation[i] of the input.
-        """
-        np = len(permutation)
-        particle_states = [state.args[permutation[i]] for i in range(np)] + list(state.args[np:])
-        return state.func(*particle_states)
-
     def _apply_operator_FieldKet(self, rhs: FieldKet, **options) -> Expr:
-        return self.order_particles(rhs, self.args)  # pylint: disable=no-value-for-parameter
+        return order_args(rhs, self.args)  # pylint: disable=no-value-for-parameter
 
     def _apply_operator_ParticlePermutation(self, rhs: 'ParticlePermutation', **options) -> Expr:
         new_indices = [rhs_arg[self_arg] for self_arg, rhs_arg in zip(self.args, rhs.args)]
@@ -75,7 +57,7 @@ class ParticlePermutation(HermitianOperator, UnitaryOperator):
 
     def _apply_from_right_to(self, lhs: Expr, **options) -> Expr:
         if isinstance(lhs, FieldBra):
-            return self.order_particles(lhs, self.args)
+            return order_args(lhs, self.args)
         return None
 
 
@@ -109,19 +91,8 @@ class ParticleSwap(HermitianOperator, UnitaryOperator):
             (self._print_operator_name_latex(printer, *args),) + self.args
         )
 
-    @staticmethod
-    def swap_particles(
-        state: Union[FieldState, FieldOperator],
-        index1: int,
-        index2: int
-    ) -> FieldState:
-        particle_states = list(state.args)
-        particle_states[index1] = state.args[index2]
-        particle_states[index2] = state.args[index1]
-        return state.func(*particle_states)
-
     def _apply_operator_FieldKet(self, rhs: FieldKet, **options) -> Expr:
-        return self.swap_particles(rhs, self.args[0], self.args[1])
+        return swap_args(rhs, self.args[0], self.args[1])
 
     def _apply_operator_ParticleSwap(self, rhs: 'ParticleSwap', **options) -> Expr:
         if set(rhs.args) == set(self.args):
@@ -134,7 +105,7 @@ class ParticleSwap(HermitianOperator, UnitaryOperator):
 
     def _apply_from_right_to(self, lhs: Expr, **options) -> Expr:
         if isinstance(lhs, FieldBra):
-            return self.swap_particles(lhs, self.args[0], self.args[1])
+            return swap_args(lhs, self.args[0], self.args[1])
         return None
 
     def _eval_power(self, exp):
@@ -174,7 +145,7 @@ class StepSymmetrizerBase(HermitianOperator):
         result_states = [rhs]
         for ipart in range(new_num - 1):
             result_states.append(
-                self._sign * ParticleSwap.swap_particles(rhs, new_num - 1, ipart)
+                self._sign * swap_args(rhs, new_num - 1, ipart)
             )
         return Add(*result_states) / sqrt(new_num)
 
@@ -255,7 +226,7 @@ class SymmetrizerBase(HermitianOperator):
         result_states = []
         sign = 1
         for perm in generate_perm(range(self.args[0])):
-            result_states.append(sign * ParticlePermutation.order_particles(rhs, perm))
+            result_states.append(sign * order_args(rhs, perm))
             sign *= self._sign
 
         return Add(*result_states) / sqrt(factorial(self.args[0]))

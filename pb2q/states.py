@@ -11,7 +11,7 @@ from sympy.physics.quantum.qexpr import QExpr
 from sympy.printing.pretty.stringpict import prettyForm
 
 from .sympy.product_state import ProductState, ProductKet, ProductBra
-from .utils import generate_perm
+from .permutation import generate_perm, order_args
 
 
 class UniverseState(ProductState):
@@ -147,9 +147,6 @@ class SymmetricFieldStateBase(FieldState):
         return obj
 
     def doit(self, **hints):
-        # pylint: disable-next=import-outside-toplevel
-        from .operators.symm import ParticlePermutation
-
         npart = self.nocc if self.right_filled else len(self.args)
         permutations = [perm + tuple(range(npart, len(self.args)))
                         for perm in generate_perm(range(npart))]
@@ -165,7 +162,7 @@ class SymmetricFieldStateBase(FieldState):
                 terms.append(self.field_state(*self.args))
             else:
                 terms.append(
-                    (self._sign ** ip) * ParticlePermutation.order_particles(terms[0], perm)
+                    (self._sign ** ip) * order_args(terms[0], perm)
                 )
 
         return (Add(*terms) / norm).expand()
