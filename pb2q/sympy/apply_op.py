@@ -53,6 +53,10 @@ def _do_apply_op(e, options):
     if isinstance(e, KetBase):
         return e
 
+    # If we have an unevaluated inner product, do it.
+    if isinstance(e, InnerProduct):
+        return e.doit()
+
     # We have an Add(a, b, c, ...) and compute
     # Add(qapply(a), qapply(b), ...)
     if isinstance(e, Add):
