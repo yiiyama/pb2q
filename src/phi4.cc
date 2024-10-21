@@ -5,6 +5,7 @@
 #include <map>
 #include <cmath>
 #include <algorithm>
+#include <iostream>
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
 #include "combinatorics.h"
@@ -16,11 +17,7 @@ typedef std::vector<py::array_t<unsigned> > Basis;
 typedef std::tuple<py::array_t<complex128>, py::array_t<unsigned>, py::array_t<unsigned> > CSRData;
 
 extern "C" {
-  std::pair<Basis, CSRData> make_h1_matrix_1d(
-    unsigned nParticles,
-    std::vector<Momentum<1> >& momenta,
-    double mass
-  );
+  std::pair<Basis, CSRData> make_h1_matrix_1d(unsigned, py::array_t<int>&, double);
   // CSRData make_h1_matrix_2d(
   //   unsigned nParticles,
   //   std::vector<std::array<int, 2>& momenta
@@ -37,11 +34,20 @@ template<unsigned NDIM>
 std::pair<Basis, CSRData>
 make_h1_matrix(
   unsigned nParticles,
-  std::vector<Momentum<NDIM> >& momenta,
+  py::array_t<int>& momentaArray,
   double mass
 )
 {
   typedef std::array<unsigned, 4> VtxMomentumIndices;
+
+  if (!((NDIM == 1 && momentaArray.ndim() == 1) || momentaArray.shape()[1] == NDIM))
+    throw std::runtime_error("Wrong momentum shape");
+
+  std::vector<Momentum<NDIM> > momenta{};
+  for (unsigned iP(0); iP != momentaArray.shape()[0]; ++iP)
+    momenta.emplace_back(momentaArray.data(iP));
+
+  std::cout << "filled momenta" << std::endl;
 
   unsigned nMax(nParticles + 1);
 
@@ -71,6 +77,8 @@ make_h1_matrix(
       }
     }
   }
+
+  std::cout << "computed allowed momenta" << std::endl;
 
   std::vector<std::vector<std::vector<unsigned> > > pExtBlocks;
   std::vector<std::vector<unsigned> > pExts;
@@ -206,7 +214,7 @@ make_h1_matrix(
 std::pair<Basis, CSRData>
 make_h1_matrix_1d(
   unsigned nParticles,
-  std::vector<Momentum<1> >& momenta,
+  py::array_t<int>& momenta,
   double mass
 )
 {

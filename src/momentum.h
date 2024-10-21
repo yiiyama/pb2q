@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <algorithm>
 
 template<unsigned NDIM>
 class Momentum {
@@ -11,6 +12,7 @@ class Momentum {
   public:
     Momentum() {}
     Momentum(std::array<int, NDIM>& _p) : p_(_p) {}
+    Momentum(int const* _ptr) : p_{} { std::copy(_ptr, _ptr + NDIM, p_.begin()); }
     Momentum(self_type const& _orig) : p_(_orig.p_) {}
     ~Momentum() {}
     self_type& operator=(self_type const& _rhs) {
@@ -95,6 +97,7 @@ class Momentum<1> {
   public:
     Momentum() {}
     Momentum(int _p) : p_(_p) {}
+    Momentum(int const* _ptr) : p_(*_ptr) {}
     Momentum(self_type const& _orig) : p_(_orig.p_) {}
     ~Momentum() {}
     self_type& operator=(self_type const& _rhs) {

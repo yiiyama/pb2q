@@ -29,9 +29,21 @@ def build_phi4(context):
         'g++ -O3 -Wall -Werror -shared -std=c++17 -fPIC'
         ' `python3 -m pybind11 --includes`'
         ' -I.'
-        ' -L. -lpb2q -Wl,-rpath,.'
-        ' -o ../pb2q/phi4`python3-config --extension-suffix`'
         ' phi4.cc'
+        f' -L. -lpb2q -Wl,-rpath,{os.path.dirname(__file__)}'
+        ' -o ../pb2q/phi4`python3-config --extension-suffix`'
+    )
+
+
+@invoke.task()
+def build_test(context):
+    LOG.info('Compiling test..')
+    invoke.run(
+        'g++ -O3 -Wall -Werror -shared -std=c++17 -fPIC'
+        ' `python3 -m pybind11 --includes`'
+        ' -I.'
+        ' test.cc'
+        ' -o ../pb2q/test`python3-config --extension-suffix`'
     )
 
 
