@@ -15,9 +15,9 @@ def build_lib(context):
     infiles = ['combinatorics']
     LOG.info('Compiling lib..')
     invoke.run(
-        ('g++ -c -O3 -Wall -Werror -std=c++17 -fPIC'
+        ('g++ -O3 -Wall -Werror -shared -std=c++17 -fPIC'
          ' `python3 -m pybind11 --includes`'
-         ' -o ../libpb2q.o ')
+         ' -o libpb2q.so ')
         + ' '.join(f"{src}.cc" for src in infiles)
     )
 
@@ -29,7 +29,7 @@ def build_phi4(context):
         'g++ -O3 -Wall -Werror -shared -std=c++17 -fPIC'
         ' `python3 -m pybind11 --includes`'
         ' -I.'
-        ' -L. -lpb2q'
+        ' -L. -lpb2q -Wl,-rpath,.'
         ' -o ../pb2q/phi4`python3-config --extension-suffix`'
         ' phi4.cc'
     )
@@ -37,7 +37,7 @@ def build_phi4(context):
 
 @invoke.task
 def clean(context):
-    for file in glob.glob('*.o'):
+    for file in glob.glob('*.so'):
         os.remove(file)
     for file in glob.glob('../pb2q/*.so'):
         os.remove(file)

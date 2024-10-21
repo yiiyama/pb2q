@@ -4,20 +4,22 @@
 #include <vector>
 #include <map>
 #include <cmath>
+#include <algorithm>
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
 #include "combinatorics.h"
 #include "momentum.h"
 
 namespace py = pybind11;
-using complex128 = std::complex<double>;
-using CSRData = std::tuple<py::array_t<complex128>, py::array_t<unsigned>, py::array_t<unsigned> >;
-using Signs = std::array<int, 4>;
+typedef std::complex<double> complex128;
+typedef std::vector<py::array_t<unsigned> > Basis;
+typedef std::tuple<py::array_t<complex128>, py::array_t<unsigned>, py::array_t<unsigned> > CSRData;
 
 extern "C" {
-  CSRData make_h1_matrix_1d(
+  std::pair<Basis, CSRData> make_h1_matrix_1d(
     unsigned nParticles,
-    std::vector<Momentum<1> >& momenta
+    std::vector<Momentum<1> >& momenta,
+    double mass
   );
   // CSRData make_h1_matrix_2d(
   //   unsigned nParticles,
@@ -32,7 +34,7 @@ opSign(unsigned iPatt, unsigned iPart)
 }
 
 template<unsigned NDIM>
-CSRData
+std::pair<Basis, CSRData>
 make_h1_matrix(
   unsigned nParticles,
   std::vector<Momentum<NDIM> >& momenta,
@@ -46,45 +48,45 @@ make_h1_matrix(
   // kinematically allowed momentum combinations for each operator pattern
   std::array<std::vector<VtxMomentumIndices>, 16> allowedMomenta;
   for (unsigned iPatt(0); iPatt != 16; ++iPatt) {
-    auto signs{{opSign(iPatt, 0), opSign(iPatt, 1), opSign(iPatt, 2), opSign(iPatt, 3)}};
+    std::array<int, 4> signs{opSign(iPatt, 0), opSign(iPatt, 1), opSign(iPatt, 2), opSign(iPatt, 3)};
     for (unsigned iP0(0); iP0 != momenta.size(); ++iP0) {
       for (unsigned iP1(0); iP1 != momenta.size(); ++iP1) {
         for (unsigned iP2(0); iP2 != momenta.size(); ++iP2) {
           for (unsigned iP3(0); iP3 != momenta.size(); ++iP3) {
-            bool vanishes{true};
+            bool vanishes(true);
             for (unsigned iDim(0); iDim != NDIM; ++iDim) {
-              int total{momenta[iP0][iDim] * signs[0]
+              int total(momenta[iP0][iDim] * signs[0]
                         + momenta[iP1][iDim] * signs[1]
                         + momenta[iP2][iDim] * signs[2]
-                        + momenta[iP3][iDim] * signs[3]};
+                        + momenta[iP3][iDim] * signs[3]);
               if (total != 0) {
                 vanishes = false;
                 break;
               }
             }
             if (vanishes)
-              allowedMomenta[iPatt].emplace_back({iP0, iP1, iP2, iP3});
+              allowedMomenta[iPatt].push_back({iP0, iP1, iP2, iP3});
           }
         }
       }
     }
   }
 
-  std::vector<unsigned> nPartBlocks(1, 0);
-  std::vector<std::vector<unsigned> > pCombs;
+  std::vector<std::vector<std::vector<unsigned> > > pExtBlocks;
+  std::vector<std::vector<unsigned> > pExts;
   for (unsigned nPart(0); nPart != nMax; ++nPart) {
-    pCombs.insert(pCombs.end(), combinationsWithReplacement(momenta.size(), nPart));
-    nPartBlocks.push_back(pCombs.size());
+    pExtBlocks.push_back(combinationsWithReplacement(momenta.size(), nPart));
+    pExts.insert(pExts.end(), pExtBlocks.back().begin(), pExtBlocks.back().end());
   }
 
   // map combination to pTotal sector
   std::map<Momentum<NDIM>, unsigned> pTotalSectors;
-  std::vector<unsigned> combSectors(pCombs.size(), -1);
-  for (unsigned iComb(0); iComb != pCombs.size(); ++iComb) {
+  std::vector<unsigned> combSectors(pExts.size(), -1);
+  for (unsigned iExt(0); iExt != pExts.size(); ++iExt) {
     Momentum<NDIM> pTotal;
-    for (unsigned iMom : pCombs[iComb])
+    for (unsigned iMom : pExts[iExt])
       pTotal += momenta[iMom];
-    auto itr{pTotalSectors.find(pTotal)};
+    auto itr(pTotalSectors.find(pTotal));
     unsigned sector;
     if (itr == pTotalSectors.end()) {
       sector = pTotalSectors.size();
@@ -93,17 +95,18 @@ make_h1_matrix(
     else
       sector = itr->second;
 
-    combSectors[iComb] = sector;
+    combSectors[iExt] = sector;
   }
 
   // reverse mapping sector -> combinations
   std::vector<std::vector<unsigned> > sectorized(pTotalSectors.size());
-  for (unsigned iComb(0); iComb != pCombs.size(); ++iComb)
-    sectorized[combSectors].push_back(iComb);
+  for (unsigned iExt(0); iExt != pExts.size(); ++iExt)
+    sectorized[combSectors[iExt]].push_back(iExt);
 
   // Compute matrix elements
-  std::vector<std::pair<unsigned, unsigned>, complex128> matrixData;
+  std::map<std::pair<unsigned, unsigned>, complex128> matrixData;
   for (unsigned nBra(0); nBra != nMax; ++nBra) {
+    unsigned iKetStart(0);
     for (unsigned nKet(0); nKet <= nBra; ++nKet) {
       std::vector<unsigned> ladderPatterns;
       for (unsigned iPatt(0); iPatt != 16; ++iPatt) {
@@ -121,9 +124,9 @@ make_h1_matrix(
       if (ladderPatterns.empty())
         continue;
 
-      for (unsigned iKet(nPartBlocks[nKet]); iKet != nPartBlocks[nKet + 1]; ++iKet) {
+      for (unsigned iKet(iKetStart); iKet != iKetStart + pExtBlocks[nKet].size(); ++iKet) {
         std::map<Momentum<NDIM>, unsigned> pCountsKet;
-        for (unsigned pIdx : pCombs[iKet])
+        for (unsigned pIdx : pExts[iKet])
           ++pCountsKet[pIdx];
 
         for (unsigned iBra : sectorized[pTotalSectors[iKet]]) {
@@ -133,9 +136,9 @@ make_h1_matrix(
           for (unsigned iPatt : ladderPatterns) {
             for (auto& pIndices : allowedMomenta[iPatt]) {
               auto pCounts(pCountsKet);
-              double factor{1.};
+              double factor(1.);
               for (unsigned iPart(0); iPart != 4; ++iPart) {
-                unsigned count{pCounts[pIndices[iPart]]};
+                unsigned count(pCounts[pIndices[iPart]]);
                 if (opSign(iPatt, iPart) == -1) {
                   if (count == 0) {
                     factor = 0.;
@@ -151,7 +154,7 @@ make_h1_matrix(
               }
               if (factor == 0.)
                 continue;
-              for (unsigned pIdx : pCombs[iBra]) {
+              for (unsigned pIdx : pExts[iBra]) {
                 if (pCounts[pIdx]-- == 0) {
                   factor = 0.;
                   break;
@@ -168,22 +171,46 @@ make_h1_matrix(
           }
         }
       }
+      iKetStart += pExtBlocks[nKet].size();
     }
   }
 
-  auto data{py::array_t<complex128>(2)};
-  auto indices{py::array_t<unsigned>(2)};
-  auto indptr{py::array_t<unsigned>(2)};
-  return {data, indices, indptr};
+  Basis basis{};
+  for (unsigned nPart(1); nPart != nMax; ++nPart) {
+    auto& block(pExtBlocks[nPart]);
+    basis.push_back(py::array_t<unsigned>({std::size_t(block.size()), std::size_t(nPart)}));
+    for (unsigned iExt(0); iExt != pExtBlocks[nPart].size(); ++iExt)
+      std::copy(block[iExt].begin(), block[iExt].end(), basis.back().mutable_data(iExt, 0));
+  }
+
+  CSRData csrData{
+    py::array_t<complex128>(matrixData.size()),
+    py::array_t<unsigned>(matrixData.size()),
+    py::array_t<unsigned>(pExts.size() + 1)
+  };
+
+  unsigned iElem(0);
+  unsigned iRow{0};
+  for (auto& melem : matrixData) {
+    unsigned row(melem.first.first);
+    unsigned col(melem.first.second);
+    while (iRow < row)
+      std::get<2>(csrData).mutable_at(iRow++) = iElem;
+    std::get<0>(csrData).mutable_at(iElem) = melem.second;
+    std::get<1>(csrData).mutable_at(iElem) = col;
+  }
+
+  return {basis, csrData};
 }
 
-CSRData
+std::pair<Basis, CSRData>
 make_h1_matrix_1d(
   unsigned nParticles,
-  std::vector<std::array<int, 1> >& momenta
+  std::vector<Momentum<1> >& momenta,
+  double mass
 )
 {
-  return make_h1_matrix<1>(nParticles, momenta);
+  return make_h1_matrix<1>(nParticles, momenta, mass);
 }
 
 PYBIND11_MODULE(phi4, module) {
