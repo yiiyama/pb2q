@@ -3,9 +3,11 @@
 #include <utility>
 #include <vector>
 #include <map>
+#include <cmath>
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
 #include "combinatorics.h"
+#include "momentum.h"
 
 namespace py = pybind11;
 using complex128 = std::complex<double>;
@@ -15,7 +17,7 @@ using Signs = std::array<int, 4>;
 extern "C" {
   CSRData make_h1_matrix_1d(
     unsigned nParticles,
-    std::vector<std::array<int, 1> >& momenta
+    std::vector<Momentum<1> >& momenta
   );
   // CSRData make_h1_matrix_2d(
   //   unsigned nParticles,
@@ -23,95 +25,148 @@ extern "C" {
   // );
 }
 
+int
+opSign(unsigned iPatt, unsigned iPart)
+{
+  return ((iPatt >> iPart) & 1) * 2 - 1;
+}
+
 template<unsigned NDIM>
 CSRData
 make_h1_matrix(
   unsigned nParticles,
-  std::vector<std::array<int, NDIM> >& momenta
+  std::vector<Momentum<NDIM> >& momenta,
+  double mass
 )
 {
-  using Momentum = std::array<int, NDIM>;
-  using VertexMomenta = std::array<Momentum, 4>;
-
-  // annilation and creation op combinations
-  Signs allSigns[16];
-  for (unsigned iSign(0); iSign != 16; ++iSign) {
-    allSigns[iSign] = {
-      (iSign & 1) == 1 ? -1 : 1,
-      ((iSign >> 1) & 1) == 1 ? -1 : 1,
-      ((iSign >> 2) & 1) == 1 ? -1 : 1,
-      ((iSign >> 3) & 1) == 1 ? -1 : 1
-    };
-  }
+  typedef std::array<unsigned, 4> VtxMomentumIndices;
 
   unsigned nMax(nParticles + 1);
 
-  // possible annihilation and creation op combinations for initial & final num particles
-  auto ladderPatterns{std::map<std::pair<unsigned, unsigned>, std::vector<unsigned> >()};
-  for (unsigned nBra(0); nBra != nMax; ++nBra) {
-    for (unsigned nKet(0); nKet != nMax; ++nKet) {
-      for (unsigned iSign(0); iSign != 16; ++iSign) {
-        int nPart(nKet);
-        for (int sign : allSigns[iSign]) {
-          nPart += sign;
-          if (nPart < 0) {
-            break;
-          }
-        }
-        if (nPart >= 0) {
-          nPart -= nBra;
-        }
-        if (nPart == 0) {
-          ladderPatterns[std::make_pair(nBra, nKet)].push_back(iSign);
-        }
-      }
-    }
-  }
-
   // kinematically allowed momentum combinations for each operator pattern
-  auto allowedMomenta{std::array<std::vector<VertexMomenta>, 16>()};
-  for (unsigned iSign(0); iSign != 16; ++iSign) {
-    auto& signs{allSigns[iSign]};
-    for (auto& p0 : momenta) {
-      for (auto& p1 : momenta) {
-        for (auto& p2 : momenta) {
-          for (auto& p3 : momenta) {
+  std::array<std::vector<VtxMomentumIndices>, 16> allowedMomenta;
+  for (unsigned iPatt(0); iPatt != 16; ++iPatt) {
+    auto signs{{opSign(iPatt, 0), opSign(iPatt, 1), opSign(iPatt, 2), opSign(iPatt, 3)}};
+    for (unsigned iP0(0); iP0 != momenta.size(); ++iP0) {
+      for (unsigned iP1(0); iP1 != momenta.size(); ++iP1) {
+        for (unsigned iP2(0); iP2 != momenta.size(); ++iP2) {
+          for (unsigned iP3(0); iP3 != momenta.size(); ++iP3) {
             bool vanishes{true};
             for (unsigned iDim(0); iDim != NDIM; ++iDim) {
-              auto total{p0[iDim] * signs[0] + p1[iDim] * signs[1] + p2[iDim] * signs[2] + p3[iDim] * signs[3]};
+              int total{momenta[iP0][iDim] * signs[0]
+                        + momenta[iP1][iDim] * signs[1]
+                        + momenta[iP2][iDim] * signs[2]
+                        + momenta[iP3][iDim] * signs[3]};
               if (total != 0) {
                 vanishes = false;
                 break;
               }
             }
-            if (vanishes) {
-              allowedMomenta[iSign].push_back({p0, p1, p2, p3});
-            }
+            if (vanishes)
+              allowedMomenta[iPatt].emplace_back({iP0, iP1, iP2, iP3});
           }
         }
       }
     }
   }
 
-  std::vector<unsigned> basisOffsets{};
-  unsigned nBasis{0};
-  basisOffsets.push_back(nBasis);
-  for (unsigned nPart(0); nPart != nMax; ++nPart)
-    basisOffsets.push_back(basisOffsets.back() + comb(momenta.size() - 1 + nPart, nPart));
+  std::vector<unsigned> nPartBlocks(1, 0);
+  std::vector<std::vector<unsigned> > pCombs;
+  for (unsigned nPart(0); nPart != nMax; ++nPart) {
+    pCombs.insert(pCombs.end(), combinationsWithReplacement(momenta.size(), nPart));
+    nPartBlocks.push_back(pCombs.size());
+  }
+
+  // map combination to pTotal sector
+  std::map<Momentum<NDIM>, unsigned> pTotalSectors;
+  std::vector<unsigned> combSectors(pCombs.size(), -1);
+  for (unsigned iComb(0); iComb != pCombs.size(); ++iComb) {
+    Momentum<NDIM> pTotal;
+    for (unsigned iMom : pCombs[iComb])
+      pTotal += momenta[iMom];
+    auto itr{pTotalSectors.find(pTotal)};
+    unsigned sector;
+    if (itr == pTotalSectors.end()) {
+      sector = pTotalSectors.size();
+      pTotalSectors[pTotal] = sector;
+    }
+    else
+      sector = itr->second;
+
+    combSectors[iComb] = sector;
+  }
+
+  // reverse mapping sector -> combinations
+  std::vector<std::vector<unsigned> > sectorized(pTotalSectors.size());
+  for (unsigned iComb(0); iComb != pCombs.size(); ++iComb)
+    sectorized[combSectors].push_back(iComb);
 
   // Compute matrix elements
+  std::vector<std::pair<unsigned, unsigned>, complex128> matrixData;
   for (unsigned nBra(0); nBra != nMax; ++nBra) {
-    for (unsigned nKet(0); nKet != nMax; ++nKet) {
-      auto iSignItr{ladderPatterns.find(std::make_pair(nBra, nKet))};
-      if (iSignItr == ladderPatterns.end()) {
-        continue;
+    for (unsigned nKet(0); nKet <= nBra; ++nKet) {
+      std::vector<unsigned> ladderPatterns;
+      for (unsigned iPatt(0); iPatt != 16; ++iPatt) {
+        int nPart(nKet);
+        for (unsigned iPart(0); iPart != 4; ++iPart) {
+          nPart += opSign(iPatt, iPart);
+          if (nPart < 0)
+            break;
+        }
+        if (nPart < 0)
+          continue;
+        if (nPart - nBra == 0)
+          ladderPatterns.push_back(iPatt);
       }
+      if (ladderPatterns.empty())
+        continue;
 
-      auto braCombinations{combinationsWithReplacement<..., >()}
-      for (unsigned iBraComb(0); iBraComb != basisOffsets[nBra + 1] - basisOffsets[nBra]; ++iBraComb) {
-        int ptotal{0};
-        for ()
+      for (unsigned iKet(nPartBlocks[nKet]); iKet != nPartBlocks[nKet + 1]; ++iKet) {
+        std::map<Momentum<NDIM>, unsigned> pCountsKet;
+        for (unsigned pIdx : pCombs[iKet])
+          ++pCountsKet[pIdx];
 
+        for (unsigned iBra : sectorized[pTotalSectors[iKet]]) {
+          if (iBra > iKet)
+            break;
+
+          for (unsigned iPatt : ladderPatterns) {
+            for (auto& pIndices : allowedMomenta[iPatt]) {
+              auto pCounts(pCountsKet);
+              double factor{1.};
+              for (unsigned iPart(0); iPart != 4; ++iPart) {
+                unsigned count{pCounts[pIndices[iPart]]};
+                if (opSign(iPatt, iPart) == -1) {
+                  if (count == 0) {
+                    factor = 0.;
+                    break;
+                  }
+                  factor *= std::sqrt(count);
+                  --pCounts[pIndices[iPart]];
+                }
+                else {
+                  factor *= std::sqrt(count + 1);
+                  ++pCounts[pIndices[iPart]];
+                }
+              }
+              if (factor == 0.)
+                continue;
+              for (unsigned pIdx : pCombs[iBra]) {
+                if (pCounts[pIdx]-- == 0) {
+                  factor = 0.;
+                  break;
+                }
+              }
+              if (factor == 0.)
+                continue;
+
+              for (unsigned pIdx : pIndices)
+                factor /= std::sqrt(2. * momenta[pIdx].energy(mass));
+
+              matrixData[std::make_pair(iBra, iKet)] += complex128(factor, 0.);
+            }
+          }
+        }
       }
     }
   }
