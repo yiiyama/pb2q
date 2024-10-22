@@ -53,7 +53,9 @@ make_h1_matrix(
 
   /* Collect the indices of kinematically allowed momentum combinations for each operator pattern */
   // We only need 8 vectors because the remaining 8 are copies of the others
-  std::array<std::vector<std::array<unsigned, 4> >, 8> allowedMomenta;
+  std::array<std::vector<std::array<unsigned, 4> >, 8> allowedMomenta{};
+  for (auto& plist : allowedMomenta)
+    plist.clear();
   for (unsigned iPatt : {0, 1, 3}) {
     std::array<int, 4> signs{opSign(iPatt, 0), opSign(iPatt, 1), opSign(iPatt, 2), opSign(iPatt, 3)};
     for (unsigned iP0(0); iP0 != momenta.size(); ++iP0) {
@@ -73,22 +75,22 @@ make_h1_matrix(
         }
       }
     }
-    // One different sign
-    allowedMomenta[2].reserve(allowedMomenta[1].size());
-    allowedMomenta[4].reserve(allowedMomenta[1].size());
-    allowedMomenta[7].reserve(allowedMomenta[1].size());
-    for (auto& momenta : allowedMomenta[1]) {
-      allowedMomenta[2].push_back({momenta[1], momenta[0], momenta[2], momenta[3]});
-      allowedMomenta[4].push_back({momenta[1], momenta[2], momenta[0], momenta[3]});
-      allowedMomenta[7].push_back({momenta[1], momenta[2], momenta[3], momenta[0]});
-    }
-    // Sign pairs
-    allowedMomenta[5].reserve(allowedMomenta[3].size());
-    allowedMomenta[6].reserve(allowedMomenta[3].size());
-    for (auto& momenta : allowedMomenta[3]) {
-      allowedMomenta[5].push_back({momenta[0], momenta[2], momenta[1], momenta[3]});
-      allowedMomenta[6].push_back({momenta[2], momenta[0], momenta[1], momenta[3]});
-    }
+  }
+  // One different sign
+  allowedMomenta[2].reserve(allowedMomenta[1].size());
+  allowedMomenta[4].reserve(allowedMomenta[1].size());
+  allowedMomenta[7].reserve(allowedMomenta[1].size());
+  for (auto& indices : allowedMomenta[1]) {
+    allowedMomenta[2].push_back({indices[1], indices[0], indices[2], indices[3]});
+    allowedMomenta[4].push_back({indices[1], indices[2], indices[0], indices[3]});
+    allowedMomenta[7].push_back({indices[1], indices[2], indices[3], indices[0]});
+  }
+  // Sign pairs
+  allowedMomenta[5].reserve(allowedMomenta[3].size());
+  allowedMomenta[6].reserve(allowedMomenta[3].size());
+  for (auto& indices : allowedMomenta[3]) {
+    allowedMomenta[5].push_back({indices[0], indices[2], indices[1], indices[3]});
+    allowedMomenta[6].push_back({indices[2], indices[0], indices[1], indices[3]});
   }
 
   /* External leg creator / annihilator (ket / bra) combinations */
@@ -247,7 +249,18 @@ make_h1_matrix_1d(
   return make_h1_matrix<1>(nParticles, momenta, mass);
 }
 
+std::pair<Basis, CSRData>
+make_h1_matrix_2d(
+  unsigned nParticles,
+  py::array_t<int>& momenta,
+  double mass
+)
+{
+  return make_h1_matrix<2>(nParticles, momenta, mass);
+}
+
 PYBIND11_MODULE(phi4, module) {
   module.doc() = "Scalar phi4 theory";
   module.def("make_h1_matrix_1d", &make_h1_matrix_1d, "Interaction Hamiltonian");
+  module.def("make_h1_matrix_2d", &make_h1_matrix_2d, "Interaction Hamiltonian");
 }
