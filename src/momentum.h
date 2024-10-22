@@ -3,11 +3,13 @@
 
 #include <array>
 #include <cmath>
+#include <iostream>
 #include <algorithm>
 
 template<unsigned NDIM>
 class Momentum {
   typedef Momentum<NDIM> self_type;
+  typedef std::array<int, NDIM> internal_type;
 
   public:
     Momentum() {}
@@ -85,14 +87,16 @@ class Momentum {
         e2 += p_[iDim] * p_[iDim];
       return std::sqrt(e2);
     }
+    internal_type const& data() const { return p_; }
 
   private:
-    std::array<int, NDIM> p_{};
+    internal_type p_{};
 };
 
 template<>
 class Momentum<1> {
   typedef Momentum<1> self_type;
+  typedef int internal_type;
 
   public:
     Momentum() {}
@@ -124,9 +128,20 @@ class Momentum<1> {
     int operator[](unsigned idx_) const { return p_; }
     bool isNull() const { return p_ == 0; }
     double energy(double mass) const { return std::sqrt(mass * mass + p_ * p_ ); }
+    internal_type data() const { return p_; }
 
   private:
     int p_{};
 };
+
+template<unsigned NDIM>
+std::ostream& operator<<(std::ostream& os, Momentum<NDIM> const& momentum)
+{
+  os << "[";
+  for (unsigned iDim(0); iDim != NDIM - 1; ++iDim)
+    os << momentum[iDim] << ",";
+  os << momentum[NDIM - 1] << "]";
+  return os;
+}
 
 #endif

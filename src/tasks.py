@@ -35,7 +35,7 @@ def build_phi4(context):
     )
 
 
-@invoke.task()
+@invoke.task(build_lib)
 def build_test(context):
     LOG.info('Compiling test..')
     invoke.run(
@@ -43,6 +43,7 @@ def build_test(context):
         ' `python3 -m pybind11 --includes`'
         ' -I.'
         ' test.cc'
+        f' -L. -lpb2q -Wl,-rpath,{os.path.dirname(__file__)}'
         ' -o ../pb2q/test`python3-config --extension-suffix`'
     )
 
