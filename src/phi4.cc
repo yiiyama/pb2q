@@ -148,7 +148,7 @@ make_h1_matrix(
 
       // Start from iKetStart = cumsum(block size for smaller nKets)
       for (unsigned iKet(iKetStart); iKet != iKetStart + pExtBlocks[nKet].size(); ++iKet) {
-        std::map<Momentum<NDIM>, unsigned> pCountsKet;
+        std::map<unsigned, unsigned> pCountsKet;
         for (unsigned pIdx : pExts[iKet])
           ++pCountsKet[pIdx];
 
@@ -204,7 +204,8 @@ make_h1_matrix(
 
   /* Convert the containers to numpy arrays */
   Basis basis{};
-  basis.reserve(nParticles);
+  basis.reserve(nMax);
+  basis.emplace_back(std::vector{std::size_t(1), std::size_t(0)});
   for (unsigned nPart(1); nPart != nMax; ++nPart) {
     auto& block(pExtBlocks[nPart]);
     // Passing a 2-element vector (shape) as argument to array_t constructor
